@@ -18,7 +18,7 @@ Outputs:
 import os
 import sys
 import inspect
-from multiprocessing import Pool, cpu_count
+from multiprocessing import cpu_count, get_all_start_methods, get_context
 
 from snapshot_cache import SnapshotCache, stamp as _src_stamp
 import numpy as np
@@ -39,6 +39,10 @@ from athplot.utils.units import conv_dens, cactus, cgs
 from utils_ejecta import (calc_ur, sqrt_det_metric_adm, get_riemann_weights,
                           sum_over_time)
 
+# Workers must inherit the settings the bash wrapper assigns before main()
+# (e.g. SPH_DIR_LIST), so use "fork" where the platform has it (newer
+# Pythons no longer default to it); elsewhere, the default start method.
+_MP = get_context("fork" if "fork" in get_all_start_methods() else None)
 
 # ===================================================================
 # Configuration
@@ -486,9 +490,9 @@ def main():
         mn_gram = eos['mn_mev'] * cgs.eV * 1e6 / cgs.light_speed**2
         print(f"Processing {len(jobs)} snapshots with N_WORKERS={N_WORKERS}...")
         if N_WORKERS > 1:
-            with Pool(N_WORKERS,
-                      initializer=_init_ejecta_worker,
-                      initargs=(eos, mn_gram, RADIUS)) as pool:
+            with _MP.Pool(N_WORKERS,
+                          initializer=_init_ejecta_worker,
+                          initargs=(eos, mn_gram, RADIUS)) as pool:
                 for idx, r in pool.imap_unordered(
                         _cached_worker_ejecta, jobs,
                         chunksize=max(1, len(jobs) // (N_WORKERS * 4))):

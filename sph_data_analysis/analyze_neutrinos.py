@@ -69,7 +69,7 @@ import os
 import sys
 import numpy as np
 import inspect
-from multiprocessing import Pool, cpu_count
+from multiprocessing import cpu_count, get_all_start_methods, get_context
 
 from snapshot_cache import SnapshotCache, TimeIndexCache, stamp as _src_stamp
 
@@ -85,6 +85,11 @@ from sph_vtk import (SphericalData, set_default_radius, resolve_styles,
                      M1_GROUPED_VARS)
 from athplot.utils.units import conv_luminosity, conv_energy, cactus, cgs
 from utils_ejecta import sum_over_time
+
+# Workers must inherit the settings the bash wrapper assigns before main()
+# (e.g. SPH_DIR_LIST), so use "fork" where the platform has it (newer
+# Pythons no longer default to it); elsewhere, the default start method.
+_MP = get_context("fork" if "fork" in get_all_start_methods() else None)
 
 
 # ===================================================================
@@ -582,7 +587,7 @@ def main():
     if jobs:
         print(f"Processing {len(jobs)} snapshots with N_WORKERS={N_WORKERS}...")
         if N_WORKERS > 1:
-            with Pool(N_WORKERS) as pool:
+            with _MP.Pool(N_WORKERS) as pool:
                 for idx, r in pool.imap_unordered(
                         _cached_worker_neutrino, jobs,
                         chunksize=max(1, len(jobs) // (N_WORKERS * 4))):
