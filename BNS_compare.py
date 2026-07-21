@@ -26,6 +26,7 @@ import argparse
 import glob
 import os
 import sys
+import re
 
 import numpy as np
 import matplotlib
@@ -252,6 +253,22 @@ def render_one(var, t, fA, fB, labels, units, outdir, out_prefix,
     return out, med
 
 
+def read_user_header(output_dir):
+    """Read column names from bns.user.hst header."""
+
+    outdir = output_dir[0] if isinstance(output_dir, list) else output_dir
+    user_file = os.path.join(outdir, "bns.user.hst")
+    if not os.path.isfile(user_file): return None
+    names = []
+
+    with open(user_file, "r") as f:
+        for line in f:
+            if line.startswith("#"):
+                names += re.findall(r"\[\d+\]=([^\s]+)", line)
+
+    return names
+
+
 def compare_hst_all(outdirs, labels, figpath):
     """
     Compare history variables from two runs in a single figure.
@@ -259,8 +276,7 @@ def compare_hst_all(outdirs, labels, figpath):
     Panels:
       1) Baryonic mass (bns.mhd.hst)
       2) Hamiltonian constraint norm (bns.z4c.user.hst)
-      3) Maximum density (bns.user.hst)
-      4) Minimum lapse (bns.user.hst)
+      3+) All quantities from bns.user.hst (header-driven)
     """
 
     os.makedirs(figpath, exist_ok=True)
@@ -275,60 +291,71 @@ def compare_hst_all(outdirs, labels, figpath):
     user_A = combine_hst(outdirs[0], "bns.user.hst")
     user_B = combine_hst(outdirs[1], "bns.user.hst")
 
-    fig, axes = plt.subplots(2, 2, figsize=(12, 8),
-                             constrained_layout=True)
+    # Column of each user quantity, per run, from that run's own header
+    # (skip time and dt).  A quantity missing in one run is plotted for the
+    # other run only.
+    user_cols = []
+    for outdir, user in zip(outdirs, (user_A, user_B)):
+        ncol = user.shape[1] if user is not None else 0
+        names = read_user_header(outdir) or [f"user[{i}]" for i in range(ncol)]
+        user_cols.append({n: i for i, n in enumerate(names) if 2 <= i < ncol})
+    user_quantities = list(user_cols[0]) + [n for n in user_cols[1]
+                                            if n not in user_cols[0]]
+
+    def plot_col(ax, data, col, label):
+        """Plot column `col` vs time, if this run has it."""
+        if data is not None and col < data.shape[1]:
+            ax.plot(data[:, 0], data[:, col], label=label)
+
+    # Number of panels:
+    # mhd + z4c + all user quantities
+    nplots = 2 + len(user_quantities)
+    ncols = 2
+    nrows = int(np.ceil(nplots / ncols))
+    fig, axes = plt.subplots(
+        nrows, ncols,
+        figsize=(12, 4*nrows),
+        constrained_layout=True
+    )
+    axes = np.atleast_1d(axes).flatten()
 
     # Baryonic mass
-    ax = axes[0, 0]
-    if mhd_A is not None:
-        ax.plot(mhd_A[:, 0], mhd_A[:, 2], label=labels[0])
-    if mhd_B is not None:
-        ax.plot(mhd_B[:, 0], mhd_B[:, 2], label=labels[1])
-
+    ax = axes[0]
+    plot_col(ax, mhd_A, 2, labels[0])
+    plot_col(ax, mhd_B, 2, labels[1])
     ax.set_xlabel("t (Msun)")
     ax.set_ylabel("Baryonic mass")
     ax.legend()
 
     # Hamiltonian constraint
-    ax = axes[0, 1]
-    if z4c_A is not None:
-        ax.plot(z4c_A[:, 0], z4c_A[:, 3], label=labels[0])
-    if z4c_B is not None:
-        ax.plot(z4c_B[:, 0], z4c_B[:, 3], label=labels[1])
-
+    ax = axes[1]
+    plot_col(ax, z4c_A, 3, labels[0])
+    plot_col(ax, z4c_B, 3, labels[1])
     ax.set_xlabel("t (Msun)")
     ax.set_ylabel("H-norm2")
     ax.set_yscale("log")
     ax.legend()
 
-    # Maximum density
-    ax = axes[1, 0]
-    if user_A is not None:
-        ax.plot(user_A[:, 0], user_A[:, 2], label=labels[0])
-    if user_B is not None:
-        ax.plot(user_B[:, 0], user_B[:, 2], label=labels[1])
+    # User history: use header names
+    for i, name in enumerate(user_quantities):
+        ax = axes[i + 2]
+        for user, cols, label in zip((user_A, user_B), user_cols, labels):
+            if name in cols:
+                plot_col(ax, user, cols[name], label)
 
-    ax.set_xlabel("t (Msun)")
-    ax.set_ylabel(r"$\rho_\mathrm{max}$")
-    ax.legend()
+        ax.set_xlabel("t (Msun)")
+        ax.set_ylabel(name)
+        ax.legend()
 
-    # Minimum lapse
-    ax = axes[1, 1]
-    if user_A is not None:
-        ax.plot(user_A[:, 0], user_A[:, 3], label=labels[0])
-    if user_B is not None:
-        ax.plot(user_B[:, 0], user_B[:, 3], label=labels[1])
-
-    ax.set_xlabel("t (Msun)")
-    ax.set_ylabel(r"$\alpha_\mathrm{min}$")
-    ax.legend()
+    # Remove unused axes
+    for ax in axes[nplots:]:
+        ax.remove()
 
     fig.suptitle("History comparison")
 
     outfile = os.path.join(figpath, "history_comparison.png")
     fig.savefig(outfile, dpi=150)
     plt.close(fig)
-
     print(f"  Saved {outfile}")
 
 
