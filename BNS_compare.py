@@ -42,6 +42,8 @@ import plot_style                               # noqa: E402
 
 plot_style.use()  # central house style (see plot_style.py)
 
+from BNS_all import combine_hst
+
 # variable shorthand -> per-plane (new dump prefix, old prefix)
 # NB: the "old" fallback (rad_m1_*) is the SPHERICAL-surface dump, not a slice,
 # so it is only a valid fallback for xz-era runs.  For xy we require a genuine
@@ -250,6 +252,86 @@ def render_one(var, t, fA, fB, labels, units, outdir, out_prefix,
     return out, med
 
 
+def compare_hst_all(outdirs, labels, figpath):
+    """
+    Compare history variables from two runs in a single figure.
+
+    Panels:
+      1) Baryonic mass (bns.mhd.hst)
+      2) Hamiltonian constraint norm (bns.z4c.user.hst)
+      3) Maximum density (bns.user.hst)
+      4) Minimum lapse (bns.user.hst)
+    """
+
+    os.makedirs(figpath, exist_ok=True)
+
+    # Read histories
+    mhd_A = combine_hst(outdirs[0], "bns.mhd.hst")
+    mhd_B = combine_hst(outdirs[1], "bns.mhd.hst")
+
+    z4c_A = combine_hst(outdirs[0], "bns.z4c.user.hst")
+    z4c_B = combine_hst(outdirs[1], "bns.z4c.user.hst")
+
+    user_A = combine_hst(outdirs[0], "bns.user.hst")
+    user_B = combine_hst(outdirs[1], "bns.user.hst")
+
+    fig, axes = plt.subplots(2, 2, figsize=(12, 8),
+                             constrained_layout=True)
+
+    # Baryonic mass
+    ax = axes[0, 0]
+    if mhd_A is not None:
+        ax.plot(mhd_A[:, 0], mhd_A[:, 2], label=labels[0])
+    if mhd_B is not None:
+        ax.plot(mhd_B[:, 0], mhd_B[:, 2], label=labels[1])
+
+    ax.set_xlabel("t (Msun)")
+    ax.set_ylabel("Baryonic mass")
+    ax.legend()
+
+    # Hamiltonian constraint
+    ax = axes[0, 1]
+    if z4c_A is not None:
+        ax.plot(z4c_A[:, 0], z4c_A[:, 3], label=labels[0])
+    if z4c_B is not None:
+        ax.plot(z4c_B[:, 0], z4c_B[:, 3], label=labels[1])
+
+    ax.set_xlabel("t (Msun)")
+    ax.set_ylabel("H-norm2")
+    ax.set_yscale("log")
+    ax.legend()
+
+    # Maximum density
+    ax = axes[1, 0]
+    if user_A is not None:
+        ax.plot(user_A[:, 0], user_A[:, 2], label=labels[0])
+    if user_B is not None:
+        ax.plot(user_B[:, 0], user_B[:, 2], label=labels[1])
+
+    ax.set_xlabel("t (Msun)")
+    ax.set_ylabel(r"$\rho_\mathrm{max}$")
+    ax.legend()
+
+    # Minimum lapse
+    ax = axes[1, 1]
+    if user_A is not None:
+        ax.plot(user_A[:, 0], user_A[:, 3], label=labels[0])
+    if user_B is not None:
+        ax.plot(user_B[:, 0], user_B[:, 3], label=labels[1])
+
+    ax.set_xlabel("t (Msun)")
+    ax.set_ylabel(r"$\alpha_\mathrm{min}$")
+    ax.legend()
+
+    fig.suptitle("History comparison")
+
+    outfile = os.path.join(figpath, "history_comparison.png")
+    fig.savefig(outfile, dpi=150)
+    plt.close(fig)
+
+    print(f"  Saved {outfile}")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -260,6 +342,8 @@ def main():
     ap.add_argument("--vars", nargs="+",
                     default=["eta_1:2", "abs_1:2", "eta_0:2", "eta_1:0", "abs_1:0"],
                     help="Variables as base:species, e.g. eta_1:2 abs_1:2 E:0.")
+    ap.add_argument("--no-hst", action="store_true",
+                    help="Do not generate comparison plots of history variables")
     ap.add_argument("--units", default="cgs", choices=["code", "cgs", "ngs"])
     ap.add_argument("--plane", default="xz", choices=["xz", "xy"],
                     help="Slice plane to compare (needs the matching *_<plane> dumps).")
@@ -298,6 +382,9 @@ def main():
     print(f"plane={args.plane}  units={args.units}  xlim={args.xlim}  "
           f"zlim={args.zlim}  rmax={args.rmax}")
     print(f"outdir = {outdir}\n")
+
+    if not args.no_hst:
+        compare_hst_all(odirs, labels, outdir)
 
     for var in args.vars:
         base = var.partition(":")[0]
