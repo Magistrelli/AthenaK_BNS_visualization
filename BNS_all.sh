@@ -87,8 +87,8 @@ SECTIONS=(
     # rad_N         # radiation number density N:0 frames  [bns.rad_m1_N]
     # rad_N2        # radiation number density N:2 (heavy lepton) frames
     # rad_abs       # absorption opacity abs_1:0 frames    [bns.rad_m1_abs_1]
-    # rad_abs0    # absorption opacity abs_0:0 frames    [bns.rad_m1_abs_0]
-    # rad_eta0    # emissivity eta_0:0 frames            [bns.rad_m1_eta_0]
+     rad_abs0    # absorption opacity abs_0:0 frames    [bns.rad_m1_abs_0]
+     rad_eta0    # emissivity eta_0:0 frames            [bns.rad_m1_eta_0]
     # rad_eta1    # emissivity eta_1:0 frames            [bns.rad_m1_eta_1]
     # avg_energy  # derived average neutrino energy frames
     # nu_energy   # neutrino energy E/N species 0 (ν_e)    [MeV in cgs]
