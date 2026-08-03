@@ -248,8 +248,8 @@ _CODE_VMIN = {
     'N:2':       1e-7,
     'J:0':       1e-9,    # fluid-frame energy density (rad_J) [MeV/fm^3]
     'n:0':       1e-10,   # fluid-frame number density  (rad_n) [fm^-3]
-    'abs_0:0':   1e-18,
-    'abs_1:0':   1e-18,
+    'abs_0:0':   1e-13,
+    'abs_1:0':   1e-13,
     'eta_0:0':   1e-10,
     'eta_1:0':   1e-10,
     'con_H':     1e-9,
@@ -277,8 +277,8 @@ _CODE_VMAX = {
     'N:2':       1e-3,
     'J:0':       1e0,     # [MeV/fm^3]
     'n:0':       1e-3,    # [fm^-3]
-    'abs_0:0':   1e-9,
-    'abs_1:0':   1e-9,
+    'abs_0:0':   1e2,
+    'abs_1:0':   1e2,
     'eta_0:0':   1e-4,
     'eta_1:0':   1e-4,
     'con_H':     1e-4,
