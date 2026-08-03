@@ -516,7 +516,7 @@ def _parse_run_speed_log(logfile):
         r"elapsed=([0-9.eE+-]+)\s+cycle=([0-9]+)\s+time=([0-9.eE+-]+)"
     )
     elapsed, cycle, sim_time = [], [], []
-    with open(logfile) as f:
+    with open(logfile, "r", encoding="utf-8", errors="ignore") as f:
         for line in f:
             m = pattern.search(line)
             if m:
