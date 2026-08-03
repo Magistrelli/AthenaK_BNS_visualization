@@ -39,7 +39,7 @@ MODELS=()
 OUT="fig_neutrino_comparison.png"
 
 # Where to write the figure (empty = <first analysis dir>/comparison_plot/).
-OUTDIR="${SCRATCH}/athenak/comparisons"
+OUTDIR="${SCRATCH}/comparisons"
 
 # Override x-range [ms] about merger, e.g. XLIM=(-2 20).  Empty = all models.
 XLIM=()
