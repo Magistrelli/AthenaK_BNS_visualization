@@ -69,19 +69,9 @@ if [[ $# -gt 0 ]]; then
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-# SETUP  (same Lmod handling as run_analysis.sh)
+# SETUP  — machine environment from config.ini (env_setup: module/conda/venv)
 # ─────────────────────────────────────────────────────────────────────────────
-if ! command -v module &>/dev/null; then
-    for _init in "${MODULESHOME:-/usr/share/lmod/lmod}/init/bash" \
-                 /etc/profile.d/lmod.sh /etc/profile.d/z00_lmod.sh; do
-        [[ -r "${_init}" ]] && source "${_init}" && break
-    done
-fi
-if command -v module &>/dev/null; then
-    # NERSC's python module is conda-based and already bundles numpy/matplotlib;
-    # there are no separate py-numpy / py-matplotlib modules here.
-    module load python
-fi
+source "${SCRIPT_DIR}/../load_config.sh"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Build comparison_plot.py args from MODELS
