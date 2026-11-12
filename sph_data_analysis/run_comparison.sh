@@ -36,10 +36,10 @@ MODELS=()
 # "/pscratch/sd/y/yiqiu/TOV_test_athenaK/lorene_bns/DD2_m1_nn_opacity/VVLR_nn_new/analysis|NN"
 
 # Output figure filename.
-OUT="fig_neutrino_comparison_dm.png"
+OUT="fig_neutrino_comparison.png"
 
 # Where to write the figure (empty = <first analysis dir>/comparison_plot/).
-OUTDIR=""
+OUTDIR="${SCRATCH}/athenak/comparisons"
 
 # Override x-range [ms] about merger, e.g. XLIM=(-2 20).  Empty = all models.
 XLIM=()

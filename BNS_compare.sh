@@ -27,7 +27,7 @@ RUNS=()
 
 # Variables to compare, as base:species  (nue=0, anue=1, nux=2, anux=3).
 # bases: eta_0 eta_1 abs_0 abs_1 E N
-VARS=(eta_1:2 abs_1:2 eta_0:2 eta_1:0 abs_1:0)
+VARS=(temperature s_00 abs_1:0 abs_1:1 abs_1:2 eta_1:0 eta_1:1 eta_1:2)
 
 UNITS=cgs              # code | cgs | ngs   (cgs/ngs -> axes in km, opacities scaled)
 XLIM=(-60 60)          # x-range [M_sun]
@@ -36,7 +36,7 @@ PLANE=xz               # xz | xy  (xy needs genuine *_xy dumps of each variable)
 NX=400; NZ=400         # rasterization resolution of the common grid
 RMAX=3.0               # ratio panel spans 1/RMAX .. RMAX  (white = equal)
 EVERY=1                # use every Nth matched time
-OUTDIR=""              # empty = <run A>/compare_<PLANE>/
+OUTDIR="${SCRATCH}/athenak/comparisons/compare_${PLANE}"    # empty = <run A>/compare_<PLANE>/
 
 MAKE_MOVIES=1          # 1 = also encode one MP4 per variable from the frames
 FRAMERATE=10           # movie frames per second
