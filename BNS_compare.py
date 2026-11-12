@@ -19,7 +19,7 @@ python BNS_compare.py \
     --run /lus/.../VVLR_test_2 --label "eq" \
     --run /lus/.../VVLR_test_3 --label "non-eq" \
     --vars eta_1:2 abs_1:2 eta_0:2 eta_1:0 \
-    --units cgs --outdir /lus/.../VVLR_test_2/compare_opacity
+    --units cgs --outdir /lus/.../VVLR_test_2/compare_xz
 """
 
 import argparse
@@ -388,7 +388,7 @@ def main():
     ap.add_argument("--rate-vmax", type=float, default=None,
                     help="Override rate (left panels) color max [display units].")
     ap.add_argument("--outdir", default=None,
-                    help="Output dir (default: <run A>/compare_opacity/).")
+                    help="Output dir (default: <run A>/compare_<plane>/).")
     ap.add_argument("--every", type=int, default=1,
                     help="Use every Nth matched time (thin frames).")
     args = ap.parse_args()
@@ -401,7 +401,7 @@ def main():
     coord_scale, coord_label = spatial_units(args.units)
     vlabel = "y" if args.plane == "xy" else "z"
     outdir = args.outdir or os.path.join(args.runs[0],
-                                         f"compare_opacity_{args.plane}")
+                                         f"compare_{args.plane}")
     odirs = [find_output_dirs(r) for r in args.runs]
 
     print(f"A = {labels[0]} : {args.runs[0]}")
@@ -455,6 +455,13 @@ def main():
                         rv_min = lo
                     if rv_max is None:
                         rv_max = hi
+            else:
+                # Quantity is zero everywhere (LogNorm needs vmin > 0).
+                if rv_max is None:
+                    rv_max = 1.0
+                if rv_min is None:
+                    rv_min = rv_max / 1e5 if use_log else 0.0
+
         print(f"[{var}] {len(common)} matched times "
               f"[{common[0]:.0f},{common[-1]:.0f}] M_sun  rate range=[{rv_min:.2e},{rv_max:.2e}]")
         for i, t in enumerate(common):

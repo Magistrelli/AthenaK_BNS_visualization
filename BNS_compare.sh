@@ -31,10 +31,15 @@ VARS=(eta_1:2 abs_1:2 eta_0:2 eta_1:0 abs_1:0)
 UNITS=cgs              # code | cgs | ngs   (cgs/ngs -> axes in km, opacities scaled)
 XLIM=(-60 60)          # x-range [M_sun]
 ZLIM=(-60 60)          # z-range [M_sun]
+PLANE=xz               # xz | xy  (xy needs genuine *_xy dumps of each variable)
 NX=400; NZ=400         # rasterization resolution of the common grid
 RMAX=3.0               # ratio panel spans 1/RMAX .. RMAX  (white = equal)
 EVERY=1                # use every Nth matched time
-OUTDIR=""              # empty = <run A>/compare_opacity/
+OUTDIR=""              # empty = <run A>/compare_<PLANE>/
+
+MAKE_MOVIES=1          # 1 = also encode one MP4 per variable from the frames
+FRAMERATE=10           # movie frames per second
+VCODEC=""              # ffmpeg video encoder; empty = auto (libx264, libopenh264)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CLI override:  DIRA LABELA DIRB LABELB
@@ -62,6 +67,7 @@ ARGS+=(--units "${UNITS}")
 ARGS+=(--xlim "${XLIM[0]}" "${XLIM[1]}")
 ARGS+=(--zlim "${ZLIM[0]}" "${ZLIM[1]}")
 ARGS+=(--nx "${NX}" --nz "${NZ}" --rmax "${RMAX}" --every "${EVERY}")
+ARGS+=(--plane "${PLANE}")
 [[ -n "${OUTDIR}" ]] && ARGS+=(--outdir "${OUTDIR}")
 
 echo "============================================================"
@@ -71,3 +77,32 @@ echo "  vars : ${VARS[*]}"
 echo "============================================================"
 
 python3 "${SCRIPT_DIR}/BNS_compare.py" "${ARGS[@]}"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Movies: one MP4 per variable from the cmp_<var>_<time>.png frames
+# ─────────────────────────────────────────────────────────────────────────────
+if [[ "${MAKE_MOVIES}" == 1 ]]; then
+    FRAMEDIR="${OUTDIR:-${RUNS[0]%%|*}/compare_${PLANE}}"
+    # H.264 MP4 plays in browsers and chats; mpeg4 only as a last resort.
+    if [[ -z "${VCODEC}" ]]; then
+        _encoders="$(ffmpeg -hide_banner -encoders 2>/dev/null || true)"
+        for _c in libx264 libopenh264 mpeg4; do
+            if grep -qw "${_c}" <<< "${_encoders}"; then
+                VCODEC="${_c}"; break
+            fi
+        done
+        if [[ "${VCODEC}" == mpeg4 ]]; then
+            echo "WARNING: no H.264 encoder in ffmpeg; mpeg4 movies may not play in browsers"
+        fi
+    fi
+    for var in "${VARS[@]}"; do
+        name="${var//:/_}"
+        ffmpeg -y -loglevel error -framerate "${FRAMERATE}" \
+               -pattern_type glob -i "${FRAMEDIR}/cmp_${name}_*.png" \
+               -vf "pad=ceil(iw/2)*2:ceil(ih/2)*2" -c:v "${VCODEC}" \
+               -pix_fmt yuv420p -movflags +faststart \
+               "${FRAMEDIR}/${name}.mp4" \
+            && echo "  -> ${FRAMEDIR}/${name}.mp4" \
+            || echo "WARNING: no movie for ${var} (no frames or ffmpeg error)"
+    done
+fi
