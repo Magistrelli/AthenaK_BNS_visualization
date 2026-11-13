@@ -23,6 +23,7 @@ import griddata
 import analyze_ejecta as ejecta
 import analyze_neutrinos as neutrinos
 import sph_vtk as sph
+import sph_extract
 
 
 def write_bin(path, time, fields, plane):
@@ -252,6 +253,25 @@ class SphericalLayouts(unittest.TestCase):
                 np.testing.assert_allclose(result[key], results[0][key], rtol=1e-12)
         self.assertGreater(results[-1]["Mej_rate_geo"], 0)
         self.assertEqual(results[-1]["hist2d_geo"].shape, results[0]["hist2d_geo"].shape)
+
+    def test_extracted_shells_match_original(self):
+        src = Path(self.dirs[3])
+        dst = Path(self.tmp.name) / "reduced" / "sph"
+        for f in sorted(src.iterdir()):
+            self.assertTrue(sph_extract.extract(str(f), [100, 290], str(dst)).startswith("wrote"))
+        style = sph.resolve_style([str(dst)], radius=300, var="adm")
+        self.assertEqual(style.r_tag, "r=100.00-300.00")
+        for f in sorted(src.iterdir()):
+            reduced = style.path(str(dst), f.name.split(".")[-3], 1)
+            for r in (100, 300):
+                with self.subTest(file=f.name, radius=r):
+                    a = sph.SphericalData(str(f), radius=r)
+                    b = sph.SphericalData(reduced, radius=r)
+                    self.assertEqual((b.r, b.nradii), (r, 2))
+                    np.testing.assert_array_equal(b.theta, a.theta)
+                    np.testing.assert_array_equal(b.phi, a.phi)
+                    for name in a.fields:
+                        np.testing.assert_array_equal(b.fields[name], a.fields[name])
 
 
 if __name__ == "__main__":
