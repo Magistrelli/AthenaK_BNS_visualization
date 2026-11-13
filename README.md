@@ -257,6 +257,22 @@ two runs it also renders `[run A] [run B] [ratio A/B]` slice panels for matched
 output times, rasterizing each run's (possibly different) AMR grid onto a
 common grid first.
 
+### Archiving a run
+
+```bash
+bash archive_run.sh --dry-run SRC DEST   # list what is kept/reduced/dropped, with sizes
+bash archive_run.sh SRC DEST
+```
+
+Copies what later analyses need into `DEST`, in the same `output-XXXX/`
+layout, so all scripts here work on the archive: parfiles, logs, `.hst`,
+orbits, waveforms and run-level folders (`analysis*/`, `Figs/`, ...) as they
+are; `sph/` cut to the shells at `RADII` (default 100, 200, 300, 400 M☉,
+`sph_data_analysis/sph_extract.py`); `pdf_*/` gzipped file by file. The 2D/3D
+dumps (`bin/`) and restart files (`rst/`) are dropped. A run without
+`output-*/` goes to `DEST/output-0000/`. Re-running only updates what changed;
+`DEST/ARCHIVE_INFO.txt` records every run.
+
 ### Movies only
 
 ```bash
@@ -324,6 +340,7 @@ gravitational waveform.
 | `analyze_accretion.py` | Post-merger accretion rate from baryon bookkeeping (`Ṁ_accr = −dM_b/dt + Ṁ_ej(t−r/⟨v⟩)`), reusing the `.hst` files + ejecta outputs. Writes `fig_accretion.png` / `Mdot_accr_*.txt`. |
 | `plot_analysis.py` | Builds `fig_ejecta.pdf` (1×5 mass distributions vs v∞/T/Yₑ/entropy, log Mₑⱼ 1e-6–1e-2 M⊙, and dM/dθ), `fig_ejecta_time.pdf` (1×3 histories: rate, cumulative mass, instantaneous/cumulative ⟨Yₑ⟩), `fig_ejecta_ye_theta.pdf` (Yₑ vs θ), and `fig_neutrino.pdf` (log luminosity 1e51–3e54, mean energy 0–60). |
 | `run_comparison.sh` | Overlays the analysis outputs of 2–4 runs: neutrino luminosity and mean energy and the ejecta figures `fig_ejecta.pdf` and `fig_ejecta_time.pdf` (all via `comparison_plot.py`), with times relative to each run's merger. |
+| `sph_extract.py` | Cuts multi-radius `sph` dumps down to selected shells, bit for bit and in the same format (used by `../archive_run.sh`; standard library only). |
 | `utils_ejecta.py` | Shared spherical-integration helpers. |
 
 ```bash
