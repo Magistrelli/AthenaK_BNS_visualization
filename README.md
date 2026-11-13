@@ -275,7 +275,8 @@ gravitational waveform.
 | `analyze_ejecta.py` | Per-snapshot ejecta diagnostics: mass-ejection rate, and mass distributions vs v∞, temperature, Yₑ, entropy-per-baryon (from EOS Q2), θ, plus the 2-D Yₑ–θ composition map. Needs the EOS table. |
 | `analyze_neutrinos.py` | Neutrino energy luminosity, mean energy, and angular distribution from grouped `rad_m1_moments` or split `rad_m1_E/F/N`. |
 | `analyze_accretion.py` | Post-merger accretion rate from baryon bookkeeping (`Ṁ_accr = −dM_b/dt + Ṁ_ej(t−r/⟨v⟩)`), reusing the `.hst` files + ejecta outputs. Writes `fig_accretion.png` / `Mdot_accr_*.txt`. |
-| `plot_analysis.py` | Builds `fig_ejecta.pdf` (1×4 mass distributions vs v∞/T/Yₑ/entropy, log Mₑⱼ 1e-6–1e-2 M⊙), `fig_ejecta_time.pdf` (2×3 summary: rate, cumulative mass, instantaneous/cumulative ⟨Yₑ⟩, velocity, angle, and composition), `fig_ejecta_ye_theta.pdf` (Yₑ vs θ), and `fig_neutrino.pdf` (log luminosity 1e51–3e54, mean energy 0–60). |
+| `plot_analysis.py` | Builds `fig_ejecta.pdf` (1×5 mass distributions vs v∞/T/Yₑ/entropy, log Mₑⱼ 1e-6–1e-2 M⊙, and dM/dθ), `fig_ejecta_time.pdf` (1×3 histories: rate, cumulative mass, instantaneous/cumulative ⟨Yₑ⟩), `fig_ejecta_ye_theta.pdf` (Yₑ vs θ), and `fig_neutrino.pdf` (log luminosity 1e51–3e54, mean energy 0–60). |
+| `run_comparison.sh` | Overlays the analysis outputs of 2–4 runs: neutrino luminosity and mean energy and the ejecta figures `fig_ejecta.pdf` and `fig_ejecta_time.pdf` (all via `comparison_plot.py`), with times relative to each run's merger. |
 | `utils_ejecta.py` | Shared spherical-integration helpers. |
 
 ```bash

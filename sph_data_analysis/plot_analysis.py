@@ -3,8 +3,8 @@ Plot ejecta and neutrino diagnostics produced by analyze_ejecta.py and
 analyze_neutrinos.py.
 
 Reads the .txt outputs from --output-dir and writes:
-    fig_ejecta.pdf          (1x4 mass distributions: v_inf, T, Y_e, entropy)
-    fig_ejecta_time.pdf     (2x3 ejecta time evolution and distribution summary)
+    fig_ejecta.pdf          (1x5 mass distributions: v_inf, T, Y_e, entropy, angle)
+    fig_ejecta_time.pdf     (1x3 ejecta time evolution: rate, mass, <Y_e>)
     fig_ejecta_ye_theta.pdf (2-D Y_e vs theta composition map)
     fig_neutrino.pdf        (2 panels: neutrino luminosity + mean energy)
 """
@@ -53,154 +53,188 @@ def _fmt_mass(m):
     return f'{m:.2e}'.replace('e-0', 'e-').replace('e+0', 'e')
 
 
-def plot_ejecta(adir, t_ms, radius):
-    """Ejecta mass distributions vs v_inf, temperature, Y_e, and entropy.
+# Ejecta criteria: one color each.  A single model also gets one line style per
+# criterion; in a model comparison the line style tells the models apart.
+CRIT_NAME  = {'geo': 'geodesic', 'Ber': 'Bernoulli'}
+CRIT_COLOR = {'geo': 'tab:blue', 'Ber': 'tab:orange'}
+CRIT_LS    = {'geo': '-', 'Ber': '--'}
 
-    One row of four panels; the y-axis is ejected mass per bin [M_sun] on a log
-    scale fixed to 1e-6 .. 1e-2, with the geodesic and Bernoulli criteria
-    overlaid.
+
+def _hist_window(d):
+    """t - t_merger [ms] up to which the distributions of `d` were summed.
+
+    The window (T_POST_MS in run_analysis.sh) is not stored in the outputs: it
+    is where the time-integrated ejection rate reaches the distributions'
+    total mass, or the end of the run if it never does.
+    """
+    t, M = cumulative(d['rate'])
+    i = np.searchsorted(M, d['ye'][:, 1].sum() * (1 - 1e-3))
+    return t[min(i, len(t) - 1)]
+
+
+def _window_text(models):
+    """Post-merger window of the distributions, for the figure title."""
+    ends = [(label, m['t_hist']) for label, _, m in models]
+    text = r'distributions up to $t - t_\mathrm{merger}$ = '
+    if len({round(t) for _, t in ends}) == 1:
+        return text + f'{ends[0][1]:.0f} ms'
+    return text + ', '.join(f'{t:.0f} ms ({label})' for label, t in ends)
+
+
+def load_ejecta_summary(adir, t_merger):
+    """Inputs of the ejecta figures, per criterion ('geo', 'Ber').
+
+    Time series are (t - t_merger [ms], value), with the ejection rate in
+    M_sun/ms; the distributions cover the post-merger histogram window.
     """
     def load(f): return np.loadtxt(os.path.join(adir, f))
 
-    # (geo file, Ber file, x-label, fixed xlim or None -> auto to populated bins,
+    def t_rel(a):
+        a = a.copy()
+        a[:, 0] = (a[:, 0] - t_merger) * MSUN_TO_MS
+        return a
+
+    out = {}
+    for c in CRIT_NAME:
+        rate = t_rel(load(f'Mej_rate_{c}.txt'))
+        rate[:, 1] /= MSUN_TO_MS
+        out[c] = {'rate':   rate,
+                  'ye_avg': t_rel(load(f'Ye_avg_{c}.txt')),
+                  'vinf':   load(f'Mej_vinf_{c}.txt'),
+                  'T':      load(f'Mej_T_{c}.txt'),
+                  'ye':     load(f'Mej_Ye_{c}.txt'),
+                  's':      load(f'Mej_s_{c}.txt'),
+                  'rhoej':  load(f'rhoej_theta_{c}.txt')}
+    out['t_hist'] = _hist_window(out['geo'])
+    return out
+
+
+def _ejecta_lines(models):
+    """(data, color, line style, legend name) of every curve of an ejecta figure.
+
+    ``models`` is a list of (label, line style, load_ejecta_summary(...)); a
+    single model is passed as (None, None, summary).
+    """
+    multi = len(models) > 1
+    for label, mls, m in models:
+        for c in CRIT_NAME:
+            name = f'{label} {CRIT_NAME[c]}' if multi else CRIT_NAME[c]
+            yield m[c], CRIT_COLOR[c], mls or CRIT_LS[c], name
+
+
+def plot_ejecta(models, out, title):
+    """Ejecta mass distributions vs v_inf, temperature, Y_e, entropy and angle.
+
+    One row of five panels; the first four show ejected mass per bin [M_sun]
+    on a log scale fixed to 1e-6 .. 1e-2, the last dM/dtheta.  The geodesic
+    and Bernoulli criteria are overlaid.  ``models`` as for _ejecta_lines.
+    """
+    # (summary key, x-label, fixed xlim or None -> auto to populated bins,
     #  panel title, optional vertical guide line)
     panels = [
-        ('Mej_vinf_geo.txt', 'Mej_vinf_Ber.txt',
-         r'$v_\infty$ [$c$]', (0, 0.8), 'Velocity', None),
-        ('Mej_T_geo.txt', 'Mej_T_Ber.txt',
-         r'$T$ [MeV]', None, 'Temperature', None),
-        ('Mej_Ye_geo.txt', 'Mej_Ye_Ber.txt',
-         r'$Y_e$', (0, 0.6), r'$Y_e$', 0.5),
-        ('Mej_s_geo.txt', 'Mej_s_Ber.txt',
-         r'$s$ [$k_B\,\mathrm{baryon}^{-1}$]', None, 'Entropy', None),
+        ('vinf', r'$v_\infty$ [$c$]', (0, 0.8), 'Velocity', None),
+        ('T', r'$T$ [MeV]', None, 'Temperature', None),
+        ('ye', r'$Y_e$', (0, 0.6), r'$Y_e$', 0.5),
+        ('s', r'$s$ [$k_B\,\mathrm{baryon}^{-1}$]', None, 'Entropy', None),
     ]
 
-    fig, axes = plot_style.subplots(1, 4, panel_w=4.2, panel_h=4.0)
-    fig.suptitle(f'BNS SPH — Ejecta mass distributions  (r = {radius:g} M$_\\odot$)',
-                 fontsize=13)
+    fig, axes = plot_style.subplots(1, 5, panel_w=4.2, panel_h=4.0)
+    fig.suptitle(f'{title}\n{_window_text(models)}', fontsize=13)
 
-    for ax, (fgeo, fber, xlabel, xlim, title, vline) in zip(axes, panels):
-        geo = load(fgeo); ber = load(fber)
-        ax.step(geo[:, 0], geo[:, 1], color='tab:blue', where='mid',
-                lw=1.2, label='geodesic')
-        ax.step(ber[:, 0], ber[:, 1], color='tab:orange', ls='--', where='mid',
-                lw=1.2, label='Bernoulli')
+    for ax, (key, xlabel, xlim, ptitle, vline) in zip(axes, panels):
+        xmax = 0.0
+        for d, col, ls, name in _ejecta_lines(models):
+            h = d[key]
+            ax.step(h[:, 0], h[:, 1], color=col, ls=ls, where='mid',
+                    lw=1.2, label=name)
+            # auto-focus on the populated bins (all curves)
+            nz = np.where(h[:, 1] > 0)[0]
+            xmax = max(xmax, h[nz[-1], 0] * 1.1 if len(nz) else h[-1, 0])
         if vline is not None:
             ax.axvline(vline, color='gray', ls=':', lw=0.8)
         ax.set_yscale('log')
         ax.set_ylim(1e-6, 1e-2)
         ax.set_xlabel(xlabel)
-        ax.set_title(title)
-        if xlim is not None:
-            ax.set_xlim(*xlim)
-        else:
-            # auto-focus on the populated bins (both criteria)
-            nz = np.where((geo[:, 1] > 0) | (ber[:, 1] > 0))[0]
-            ax.set_xlim(0, geo[nz[-1], 0] * 1.1 if len(nz) else geo[-1, 0])
+        ax.set_title(ptitle)
+        ax.set_xlim(*(xlim if xlim is not None else (0, xmax)))
+
+    ax = axes[4]
+    ys = []
+    for d, col, ls, name in _ejecta_lines(models):
+        h = d['rhoej']
+        ax.plot(h[:, 0] * 180 / np.pi, h[:, 1], color=col, ls=ls, label=name, lw=1.2)
+        ys.append(h[:, 1])
+    _logy(ax, *ys)
+    ax.set_xlabel(r'$\theta$ [deg]')
+    ax.set_ylabel(r'$dM_\mathrm{ej}/d\theta$  [$M_\odot\,\mathrm{rad}^{-1}$]')
+    ax.set_xlim(0, 180); ax.xaxis.set_major_locator(MultipleLocator(30))
+    ax.set_title('Angle')
 
     axes[0].set_ylabel(r'$M_\mathrm{ej}$ per bin  [$M_\odot$]')
-    axes[0].legend(fontsize=9)
+    axes[0].legend(fontsize=8 if len(models) > 1 else 9)
 
     fig.tight_layout()
-    out = os.path.join(adir, 'fig_ejecta.pdf')
     fig.savefig(out, dpi=150, bbox_inches='tight')
     print(f'Saved {out}')
 
 
-def plot_ejecta_time(adir, t_merger, radius):
-    """2x3 ejecta summary. Masses in M_sun; times relative to the merger."""
-    def load(f): return np.loadtxt(os.path.join(adir, f))
-    def t_rel(t): return (t - t_merger) * MSUN_TO_MS
+def plot_ejecta_time(models, out, title):
+    """Ejecta histories: ejection rate, cumulative mass and <Ye>.
+
+    Masses in M_sun; times relative to the merger.  ``models`` as for
+    _ejecta_lines.  Every model's time series runs to its own end, and its
+    quoted totals are taken there.
+    """
+    multi = len(models) > 1
     xlab = r'$t - t_\mathrm{merger}$ [ms]'
-
-    Mej_rate_geo = load('Mej_rate_geo.txt')
-    Mej_rate_Ber = load('Mej_rate_Ber.txt')
-    Mej_vinf_geo = load('Mej_vinf_geo.txt')
-    Mej_vinf_Ber = load('Mej_vinf_Ber.txt')
-    rhoej_geo    = load('rhoej_theta_geo.txt')
-    rhoej_Ber    = load('rhoej_theta_Ber.txt')
-    Ye_avg_geo   = load('Ye_avg_geo.txt')
-    Ye_avg_Ber   = load('Ye_avg_Ber.txt')
-    Mej_Ye_geo   = load('Mej_Ye_geo.txt')
-    Mej_Ye_Ber   = load('Mej_Ye_Ber.txt')
-    t_geo_cum, Mej_geo_cum = cumulative(Mej_rate_geo)
-    t_Ber_cum, Mej_Ber_cum = cumulative(Mej_rate_Ber)
-    lab_geo = f'geodesic ({_fmt_mass(Mej_geo_cum[-1])} $M_\\odot$)'
-    lab_Ber = f'Bernoulli ({_fmt_mass(Mej_Ber_cum[-1])} $M_\\odot$)'
-    # The distributions only cover the post-merger histogram window, so their
-    # totals can be smaller than the time-integrated ones above.
-    lab_geo_h = f'geodesic ({_fmt_mass(Mej_Ye_geo[:, 1].sum())} $M_\\odot$)'
-    lab_Ber_h = f'Bernoulli ({_fmt_mass(Mej_Ye_Ber[:, 1].sum())} $M_\\odot$)'
     xlim_t = dict(left=-2.0)
+    legend_fs = 8 if multi else 9
 
-    fig, axes = plot_style.subplots(2, 3, panel_w=5.0, panel_h=4.0)
-    fig.suptitle(f'BNS SPH — Ejecta properties  (r = {radius:g} M$_\\odot$, '
-                 f'$t_\\mathrm{{merger}}$ = {t_merger:g} M$_\\odot$)', fontsize=13)
+    fig, axes = plot_style.subplots(1, 3, panel_w=5.0, panel_h=4.0)
+    fig.suptitle(title, fontsize=13)
 
-    ax = axes[0, 0]
-    rg = Mej_rate_geo[:, 1] / MSUN_TO_MS; rb = Mej_rate_Ber[:, 1] / MSUN_TO_MS
-    ax.plot(t_rel(Mej_rate_geo[:, 0]), rg, color='tab:blue', label='geodesic', lw=1.2)
-    ax.plot(t_rel(Mej_rate_Ber[:, 0]), rb, color='tab:orange', ls='--', label='Bernoulli', lw=1.2)
-    _logy(ax, rg, rb)
+    ax = axes[0]
+    ys = []
+    for d, col, ls, name in _ejecta_lines(models):
+        r = d['rate']
+        ax.plot(r[:, 0], r[:, 1], color=col, ls=ls, label=name, lw=1.2)
+        ys.append(r[:, 1])
+    _logy(ax, *ys)
     ax.set_xlabel(xlab); ax.set_ylabel(r'$\dot{M}_\mathrm{ej}$  [$M_\odot\,\mathrm{ms}^{-1}$]')
-    ax.legend(fontsize=9); ax.set_xlim(**xlim_t); ax.set_title('Mass ejection rate')
+    ax.legend(fontsize=legend_fs); ax.set_xlim(**xlim_t); ax.set_title('Mass ejection rate')
 
-    ax = axes[0, 1]
-    ax.plot(t_rel(t_geo_cum), Mej_geo_cum, color='tab:blue', label=lab_geo, lw=1.2)
-    ax.plot(t_rel(t_Ber_cum), Mej_Ber_cum, color='tab:orange', ls='--', label=lab_Ber, lw=1.2)
-    _logy(ax, Mej_geo_cum, Mej_Ber_cum)
+    ax = axes[1]
+    ys = []
+    for d, col, ls, name in _ejecta_lines(models):
+        t, M = cumulative(d['rate'])
+        ax.plot(t, M, color=col, ls=ls, lw=1.2,
+                label=name if multi else f'{name} ({_fmt_mass(M[-1])} $M_\\odot$)')
+        ys.append(M)
+    _logy(ax, *ys)
     ax.set_xlabel(xlab); ax.set_ylabel(r'$M_\mathrm{ej}$  [$M_\odot$]')
-    ax.legend(fontsize=9); ax.set_xlim(**xlim_t); ax.set_title('Cumulative ejecta mass')
+    ax.legend(fontsize=legend_fs); ax.set_xlim(**xlim_t); ax.set_title('Cumulative ejecta mass')
 
-    ax = axes[0, 2]
+    ax = axes[2]
     # Thin: instantaneous flux-weighted <Ye> crossing the sphere. Thick: <Ye>
     # of everything ejected so far -- the number to compare between models,
     # and only at equal t - t_merger, since it keeps rising as the wind arrives.
-    for Yt, R, col, ls, lab in ((Ye_avg_geo, Mej_rate_geo, 'tab:blue', '-', 'geodesic'),
-                                (Ye_avg_Ber, Mej_rate_Ber, 'tab:orange', '--', 'Bernoulli')):
+    for d, col, ls, name in _ejecta_lines(models):
+        Yt, R = d['ye_avg'], d['rate']
         n = min(len(Yt), len(R))
         tt, yy, ww = Yt[:n, 0], Yt[:n, 1], R[:n, 1]
         dm = np.concatenate([[0.0], 0.5 * (ww[1:] + ww[:-1]) * np.diff(tt)])
         dmy = np.concatenate([[0.0], 0.5 * (ww[1:] * yy[1:] + ww[:-1] * yy[:-1]) * np.diff(tt)])
         M = np.cumsum(dm)
         ycum = np.where(M > 0, np.cumsum(dmy) / np.where(M > 0, M, 1.0), np.nan)
-        ax.plot(t_rel(tt), yy, color=col, ls=ls, lw=0.7, alpha=0.6)
-        ax.plot(t_rel(tt), ycum, color=col, ls=ls, lw=1.8,
-                label=f'{lab} cumulative ({ycum[-1]:.3f})')
+        ax.plot(tt, yy, color=col, ls=ls, lw=0.7, alpha=0.6)
+        ax.plot(tt, ycum, color=col, ls=ls, lw=1.8,
+                label=f'{name} cumulative' + ('' if multi else f' ({ycum[-1]:.3f})'))
     ax.plot([], [], color='gray', lw=0.7, alpha=0.6, label='instantaneous')
     ax.axhline(0.5, color='gray', ls=':', lw=0.8)
     ax.set_xlabel(xlab); ax.set_ylabel(r'$\langle Y_e \rangle_\mathrm{ej}$')
-    ax.legend(fontsize=9); ax.set_xlim(**xlim_t); ax.set_ylim(0, 0.6); ax.set_title(r'Mass-weighted $\langle Y_e \rangle$ of the ejecta')
-
-    ax = axes[1, 0]
-    dv = np.diff(Mej_vinf_geo[:, 0]); dv = np.append(dv, dv[-1])
-    vg = Mej_vinf_geo[:, 1] / dv; vb = Mej_vinf_Ber[:, 1] / dv
-    ax.step(Mej_vinf_geo[:, 0], vg, color='tab:blue', label=lab_geo_h, lw=1.2, where='mid')
-    ax.step(Mej_vinf_Ber[:, 0], vb, color='tab:orange', ls='--', label=lab_Ber_h, lw=1.2, where='mid')
-    _logy(ax, vg, vb)
-    ax.set_xlabel(r'$v_\infty$ [$c$]'); ax.set_ylabel(r'$dM_\mathrm{ej}/dv_\infty$  [$M_\odot\,c^{-1}$]')
-    ax.legend(fontsize=9); ax.set_xlim(0, 0.8); ax.set_title('Velocity distribution')
-
-    ax = axes[1, 1]
-    ax.plot(rhoej_geo[:, 0] * 180 / np.pi, rhoej_geo[:, 1], color='tab:blue', label=lab_geo_h, lw=1.2)
-    ax.plot(rhoej_Ber[:, 0] * 180 / np.pi, rhoej_Ber[:, 1], color='tab:orange', ls='--', label=lab_Ber_h, lw=1.2)
-    _logy(ax, rhoej_geo[:, 1], rhoej_Ber[:, 1])
-    ax.set_xlabel(r'$\theta$ [deg]'); ax.set_ylabel(r'$dM_\mathrm{ej}/d\theta$  [$M_\odot\,\mathrm{rad}^{-1}$]')
-    ax.set_xlim(0, 180); ax.xaxis.set_major_locator(MultipleLocator(30))
-    ax.legend(fontsize=9); ax.set_title('Angular distribution')
-
-    ax = axes[1, 2]
-    dye = np.diff(Mej_Ye_geo[:, 0]); dye = np.append(dye, dye[-1])
-    yg = Mej_Ye_geo[:, 1] / dye; yb = Mej_Ye_Ber[:, 1] / dye
-    ax.step(Mej_Ye_geo[:, 0], yg, color='tab:blue', label=lab_geo_h, lw=1.2, where='mid')
-    ax.step(Mej_Ye_Ber[:, 0], yb, color='tab:orange', ls='--', label=lab_Ber_h, lw=1.2, where='mid')
-    _logy(ax, yg, yb)
-    ax.axvline(0.5, color='gray', ls=':', lw=0.8)
-    ax.set_xlabel(r'$Y_e$'); ax.set_ylabel(r'$dM_\mathrm{ej}/dY_e$  [$M_\odot$]')
-    ax.set_xlim(0, 0.6); ax.legend(fontsize=9); ax.set_title(r'$Y_e$ distribution')
+    ax.legend(fontsize=legend_fs); ax.set_xlim(**xlim_t); ax.set_ylim(0, 0.6); ax.set_title(r'Mass-weighted $\langle Y_e \rangle$ of the ejecta')
 
     fig.tight_layout()
-    out = os.path.join(adir, 'fig_ejecta_time.pdf')
     fig.savefig(out, dpi=150, bbox_inches='tight')
     print(f'Saved {out}')
 
@@ -312,8 +346,14 @@ def main():
         t_merger_ms = t_merger * MSUN_TO_MS
 
     if not args.no_ejecta:
-        plot_ejecta(adir, t_ms, args.ej_radius)
-        plot_ejecta_time(adir, t_merger, args.ej_radius)
+        model = [(None, None, load_ejecta_summary(adir, t_merger))]
+        plot_ejecta(
+            model, os.path.join(adir, 'fig_ejecta.pdf'),
+            f'BNS SPH — Ejecta mass distributions  (r = {args.ej_radius:g} M$_\\odot$)')
+        plot_ejecta_time(
+            model, os.path.join(adir, 'fig_ejecta_time.pdf'),
+            f'BNS SPH — Ejecta properties  (r = {args.ej_radius:g} M$_\\odot$, '
+            f'$t_\\mathrm{{merger}}$ = {t_merger:g} M$_\\odot$)')
         plot_ye_theta(adir, args.ej_radius)
     if not args.no_neutrino:
         plot_neutrino(adir, t_ms, t_merger_ms, nu_xlabel, nu_xlim, args.radius)

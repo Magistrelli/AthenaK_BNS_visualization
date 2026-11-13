@@ -8,8 +8,14 @@ analysis directory (no data regeneration).  Both models are drawn on one figure:
   * the models are distinguished by line style (1st = solid, 2nd = dashed, ...);
   * time is measured relative to each model's own merger (single merger marker
     at t - t_merger = 0);
-  * the x-range is clipped to the overlap of the models (i.e. the shorter window);
+  * the x-range spans all models, each drawn to its own end;
   * a model legend (line style) is placed at the lower right.
+
+With --ejecta-out / --ejecta-time-out it also overlays the models' ejecta
+figures fig_ejecta.pdf / fig_ejecta_time.pdf of plot_analysis.py (from the
+analyze_ejecta.py outputs), with the same line style per model.  The
+distributions cover each model's post-merger window (T_POST_MS in
+run_analysis.sh), which must match.
 
 Example
 -------
@@ -30,6 +36,7 @@ from matplotlib.lines import Line2D
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import plot_style  # central house style (repo root); see plot_style.py
+from plot_analysis import load_ejecta_summary, plot_ejecta, plot_ejecta_time
 
 plot_style.use()
 
@@ -75,14 +82,14 @@ def load_model(analysis_dir, t_merger=None):
     }
 
 
-def overlap_xlim(models):
-    """x-range [ms] = overlap of all models (the shorter window) about merger."""
+def span_xlim(models):
+    """x-range [ms] about merger covering all models, each to its own end."""
     lefts, rights = [], []
     for m in models:
         t = m['Ltot'][:, 0]
         lefts.append(t.min())
         rights.append(t.max())
-    return max(lefts), min(rights)
+    return min(lefts), max(rights)
 
 
 def main():
@@ -103,7 +110,13 @@ def main():
                              "(default: <first --dir>/comparison_plot/).")
     parser.add_argument("--xlim-ms", nargs=2, type=float, default=None,
                         metavar=("LO", "HI"),
-                        help="Override x-range [ms] (default: model overlap).")
+                        help="Override x-range [ms] (default: all models).")
+    parser.add_argument("--ejecta-out", default=None,
+                        help="Also write the ejecta distributions comparison "
+                             "(as fig_ejecta.pdf) to this filename in --outdir.")
+    parser.add_argument("--ejecta-time-out", default=None,
+                        help="Also write the ejecta history comparison "
+                             "(as fig_ejecta_time.pdf) to this filename in --outdir.")
     args = parser.parse_args()
 
     dirs = args.dirs
@@ -123,7 +136,7 @@ def main():
     if args.xlim_ms is not None:
         xlo, xhi = args.xlim_ms
     else:
-        xlo, xhi = overlap_xlim(models)
+        xlo, xhi = span_xlim(models)
 
     fig, axes = plot_style.subplots(1, 2, panel_w=5.5, panel_h=4.2)
     fig.suptitle("BNS — Neutrino emission: model comparison", fontsize=13)
@@ -179,6 +192,16 @@ def main():
     print(f"  models: " + ", ".join(f"{l} (t_merger={m['t_merger']:g} M_sun, ls='{s}')"
                                      for l, m, s in zip(labels, models, styles)))
     print(f"  x-range: [{xlo:.2f}, {xhi:.2f}] ms about merger")
+
+    if args.ejecta_out or args.ejecta_time_out:
+        ejecta = [(lab, ls, load_ejecta_summary(d, m['t_merger']))
+                  for lab, ls, d, m in zip(labels, styles, dirs, models)]
+    if args.ejecta_out:
+        plot_ejecta(ejecta, os.path.join(outdir, args.ejecta_out),
+                    'BNS SPH — Ejecta mass distributions: model comparison')
+    if args.ejecta_time_out:
+        plot_ejecta_time(ejecta, os.path.join(outdir, args.ejecta_time_out),
+                         'BNS SPH — Ejecta histories: model comparison')
 
 
 if __name__ == "__main__":
