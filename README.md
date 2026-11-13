@@ -24,7 +24,7 @@ vorticity, and the Q-criterion.
 | `BNS_grid.sh` | 2-D comparison driver: one figure of many slice panels — models × diagnostics, or one model over time. Uses `plot_2d_grid/`. |
 | `plot_2d_grid/` | 2-D panel-grid package (diagnostic registry, frame selection, layout engine with shared colorbars). See its own `README.md`. |
 | `plot_3d_data/` | 3-D rendering package (data loader, style/derived-field helpers, isosurface, volume & orthoslice scripts). See its own `README.md`. |
-| `BNS_compare.py` / `BNS_compare.sh` | Side-by-side comparison of two runs: `[run A] [run B] [ratio A/B]` slice panels for opacity/radiation (and other) fields. |
+| `BNS_compare.py` / `BNS_compare.sh` | Comparison of runs: history (`.hst`) variables of two or more runs overlaid, and for two runs `[run A] [run B] [ratio A/B]` slice panels for opacity/radiation (and other) fields. |
 | `make_movies.sh` | Builds one MP4/GIF per frame subfolder (`Figs/<name>_xy/`) into `Figs/all_movies/`. |
 | `athenak_units.py` | Unit conversions (code / CGS / NGS) and per-quantity plot parameters. |
 | `plot_style.py` | Central Matplotlib house style (single source). `plot_style.use()` / `plot_style.subplots(nrows, ncols)` apply the fixed look and scale the figure size to the subplot grid (size items constant per panel). |
@@ -211,14 +211,16 @@ The `ISO_LEVELS`/`ISO_CLIM` defaults assume `UNITS=cgs` (|B| in Gauss, ρ in
 g cm⁻³); switch the commented code-unit ranges if you set `UNITS=code`. The
 underlying scripts can also be called directly — see `plot_3d_data/README.md`.
 
-### Comparing two runs
+### Comparing runs
 
 ```bash
 bash BNS_compare.sh          # or: python3 BNS_compare.py --run A --run B ...
 ```
 
-Renders `[run A] [run B] [ratio A/B]` slice panels for matched output times,
-rasterizing each run's (possibly different) AMR grid onto a common grid first.
+Overlays the history (`.hst`) variables of all runs in one figure. With exactly
+two runs it also renders `[run A] [run B] [ratio A/B]` slice panels for matched
+output times, rasterizing each run's (possibly different) AMR grid onto a
+common grid first.
 
 ### Movies only
 

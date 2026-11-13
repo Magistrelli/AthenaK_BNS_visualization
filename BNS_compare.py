@@ -10,6 +10,9 @@ the ratio panel is a diverging log map centered on 1, so you can see at a glance
 The two runs' AMR grids may differ, so each is rasterized onto a common uniform
 grid (nearest-cell) before the ratio is taken.
 
+The history (.hst) comparison overlays two or more runs in one figure; with
+more than two runs the slice comparison is skipped.
+
 Conventions mirror BNS_all.py (xz slice, M_sun or km axes, AMR-aware) and the
 two-folder comparison style of sph_data_analysis/run_comparison.sh.
 
@@ -271,36 +274,40 @@ def read_user_header(output_dir):
 
 def compare_hst_all(outdirs, labels, figpath):
     """
-    Compare history variables from two runs in a single figure.
+    Compare history variables from two or more runs in a single figure.
 
     Panels:
       1) Baryonic mass (bns.mhd.hst)
       2) Hamiltonian constraint norm (bns.z4c.user.hst)
       3+) All quantities from bns.user.hst (header-driven)
+
+    A run without some .hst file is left out of the matching panels.
     """
+
+    # Read histories
+    mhd = [combine_hst(d, "bns.mhd.hst") for d in outdirs]
+    z4c = [combine_hst(d, "bns.z4c.user.hst") for d in outdirs]
+    user = [combine_hst(d, "bns.user.hst") for d in outdirs]
+
+    for label, *hst in zip(labels, mhd, z4c, user):
+        if all(h is None for h in hst):
+            print(f"  [hst] no .hst files for {label}; left out of the history plots")
+    if all(h is None for h in mhd + z4c + user):
+        return
 
     os.makedirs(figpath, exist_ok=True)
 
-    # Read histories
-    mhd_A = combine_hst(outdirs[0], "bns.mhd.hst")
-    mhd_B = combine_hst(outdirs[1], "bns.mhd.hst")
-
-    z4c_A = combine_hst(outdirs[0], "bns.z4c.user.hst")
-    z4c_B = combine_hst(outdirs[1], "bns.z4c.user.hst")
-
-    user_A = combine_hst(outdirs[0], "bns.user.hst")
-    user_B = combine_hst(outdirs[1], "bns.user.hst")
-
     # Column of each user quantity, per run, from that run's own header
-    # (skip time and dt).  A quantity missing in one run is plotted for the
-    # other run only.
+    # (skip time and dt).  A quantity missing in some runs is plotted for the
+    # other runs only.
     user_cols = []
-    for outdir, user in zip(outdirs, (user_A, user_B)):
-        ncol = user.shape[1] if user is not None else 0
+    for outdir, data in zip(outdirs, user):
+        ncol = data.shape[1] if data is not None else 0
         names = read_user_header(outdir) or [f"user[{i}]" for i in range(ncol)]
         user_cols.append({n: i for i, n in enumerate(names) if 2 <= i < ncol})
-    user_quantities = list(user_cols[0]) + [n for n in user_cols[1]
-                                            if n not in user_cols[0]]
+    user_quantities = []
+    for cols in user_cols:
+        user_quantities += [n for n in cols if n not in user_quantities]
 
     def plot_col(ax, data, col, label):
         """Plot column `col` vs time, if this run has it."""
@@ -321,16 +328,16 @@ def compare_hst_all(outdirs, labels, figpath):
 
     # Baryonic mass
     ax = axes[0]
-    plot_col(ax, mhd_A, 2, labels[0])
-    plot_col(ax, mhd_B, 2, labels[1])
+    for data, label in zip(mhd, labels):
+        plot_col(ax, data, 2, label)
     ax.set_xlabel("t (Msun)")
     ax.set_ylabel("Baryonic mass")
     ax.legend()
 
     # Hamiltonian constraint
     ax = axes[1]
-    plot_col(ax, z4c_A, 3, labels[0])
-    plot_col(ax, z4c_B, 3, labels[1])
+    for data, label in zip(z4c, labels):
+        plot_col(ax, data, 3, label)
     ax.set_xlabel("t (Msun)")
     ax.set_ylabel("H-norm2")
     ax.set_yscale("log")
@@ -339,9 +346,9 @@ def compare_hst_all(outdirs, labels, figpath):
     # User history: use header names
     for i, name in enumerate(user_quantities):
         ax = axes[i + 2]
-        for user, cols, label in zip((user_A, user_B), user_cols, labels):
+        for data, cols, label in zip(user, user_cols, labels):
             if name in cols:
-                plot_col(ax, user, cols[name], label)
+                plot_col(ax, data, cols[name], label)
 
         ax.set_xlabel("t (Msun)")
         ax.set_ylabel(name)
@@ -363,7 +370,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--run", action="append", required=True, dest="runs",
-                    help="Run directory (contains output-*/bin/). Give exactly two.")
+                    help="Run directory (contains output-*/bin/). Give two or more; "
+                         "the slice comparison needs exactly two.")
     ap.add_argument("--label", action="append", dest="labels",
                     help="Legend label per --run (same order).")
     ap.add_argument("--vars", nargs="+",
@@ -393,10 +401,10 @@ def main():
                     help="Use every Nth matched time (thin frames).")
     args = ap.parse_args()
 
-    if len(args.runs) != 2:
-        ap.error("Provide exactly two --run.")
+    if len(args.runs) < 2:
+        ap.error("Provide at least two --run.")
     labels = args.labels or [os.path.basename(os.path.normpath(r)) for r in args.runs]
-    if len(labels) != 2:
+    if len(labels) != len(args.runs):
         ap.error("Need one --label per --run.")
     coord_scale, coord_label = spatial_units(args.units)
     vlabel = "y" if args.plane == "xy" else "z"
@@ -404,14 +412,18 @@ def main():
                                          f"compare_{args.plane}")
     odirs = [find_output_dirs(r) for r in args.runs]
 
-    print(f"A = {labels[0]} : {args.runs[0]}")
-    print(f"B = {labels[1]} : {args.runs[1]}")
+    for label, run in zip(labels, args.runs):
+        print(f"run {label} : {run}")
     print(f"plane={args.plane}  units={args.units}  xlim={args.xlim}  "
           f"zlim={args.zlim}  rmax={args.rmax}")
     print(f"outdir = {outdir}\n")
 
     if not args.no_hst:
         compare_hst_all(odirs, labels, outdir)
+
+    if len(args.runs) > 2:
+        print("Slice comparison skipped: it needs exactly two runs.")
+        return
 
     for var in args.vars:
         base = var.partition(":")[0]

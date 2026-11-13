@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 # =============================================================================
-# BNS_compare.sh  —  compare opacity / radiation slices between TWO runs
+# BNS_compare.sh  —  compare history and opacity / radiation slices of runs
 #
-# Wraps BNS_compare.py.  For each variable and matched output time it renders a
-# 3-panel figure  [run A] [run B] [ratio A/B]  on the xz slice, reusing the same
-# units / colormaps as BNS_all.py.  Mirrors the two-folder convention of
-# sph_data_analysis/run_comparison.sh.
+# Wraps BNS_compare.py.  The history (.hst) variables of all runs are overlaid
+# in one figure.  With exactly two runs, for each variable and matched output
+# time it also renders a 3-panel figure  [run A] [run B] [ratio A/B]  on the
+# xz slice, reusing the same units / colormaps as BNS_all.py.  Mirrors the
+# multi-folder convention of sph_data_analysis/run_comparison.sh.
 #
 # Usage:
-#   bash BNS_compare.sh                          # uses RUNS / VARS below
-#   bash BNS_compare.sh DIRA LABELA DIRB LABELB  # override the two runs on CLI
+#   bash BNS_compare.sh                               # uses RUNS / VARS below
+#   bash BNS_compare.sh DIR1 LABEL1 DIR2 LABEL2 [...] # override the runs on CLI
 # =============================================================================
 
 set -euo pipefail
@@ -18,7 +19,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # ─────────────────────────────────────────────────────────────────────────────
 # SETTINGS  ← edit per comparison
 # ─────────────────────────────────────────────────────────────────────────────
-# Exactly two runs: "run_dir|label".  Each run_dir contains output-*/bin/.
+# Two or more runs: "run_dir|label".  Each run_dir contains output-*/ (or the
+# .hst files directly).  The slice comparison needs exactly two runs.
 RUNS=(
     "/lus/flare/projects/CompactBinaryMerger/yiqiu/Large_sim/bundle_run/VVLR_test_2|eq"
     "/lus/flare/projects/CompactBinaryMerger/yiqiu/Large_sim/bundle_run/VVLR_test_3|non-eq"
@@ -42,12 +44,17 @@ FRAMERATE=10           # movie frames per second
 VCODEC=""              # ffmpeg video encoder; empty = auto (libx264, libopenh264)
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CLI override:  DIRA LABELA DIRB LABELB
+# CLI override:  DIR1 LABEL1 DIR2 LABEL2 [...]
 # ─────────────────────────────────────────────────────────────────────────────
-if [[ $# -eq 4 ]]; then
-    RUNS=("$1|$2" "$3|$4")
-elif [[ $# -ne 0 ]]; then
-    echo "Usage: $0 [DIRA LABELA DIRB LABELB]"; exit 1
+if [[ $# -gt 0 ]]; then
+    if [[ $# -lt 4 || $(( $# % 2 )) -ne 0 ]]; then
+        echo "Usage: $0 [DIR1 LABEL1 DIR2 LABEL2 ...]"; exit 1
+    fi
+    RUNS=()
+    while [[ $# -gt 0 ]]; do
+        RUNS+=("$1|$2")
+        shift 2
+    done
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -71,7 +78,7 @@ ARGS+=(--plane "${PLANE}")
 [[ -n "${OUTDIR}" ]] && ARGS+=(--outdir "${OUTDIR}")
 
 echo "============================================================"
-echo "  BNS opacity slice comparison (A vs B, + ratio)"
+echo "  BNS history + opacity slice comparison"
 for entry in "${RUNS[@]}"; do echo "    - ${entry%%|*}  (${entry#*|})"; done
 echo "  vars : ${VARS[*]}"
 echo "============================================================"
@@ -81,7 +88,7 @@ python3 "${SCRIPT_DIR}/BNS_compare.py" "${ARGS[@]}"
 # ─────────────────────────────────────────────────────────────────────────────
 # Movies: one MP4 per variable from the cmp_<var>_<time>.png frames
 # ─────────────────────────────────────────────────────────────────────────────
-if [[ "${MAKE_MOVIES}" == 1 ]]; then
+if [[ "${MAKE_MOVIES}" == 1 && ${#RUNS[@]} -eq 2 ]]; then
     FRAMEDIR="${OUTDIR:-${RUNS[0]%%|*}/compare_${PLANE}}"
     # H.264 MP4 plays in browsers and chats; mpeg4 only as a last resort.
     if [[ -z "${VCODEC}" ]]; then
