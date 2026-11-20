@@ -67,9 +67,9 @@ SECTIONS=(
     # trackers      # NS trajectory plot (both stars, smoothed)
     run_speed     # AthenaK cycles/sec from log file
 
-    # density       # density (dens) slice frames  [+ trackers + AMR grid]
-    # temperature   # temperature slice frames      [+ trackers + AMR grid]
-    # s00           # electron fraction (s_00) frames
+    density       # density (dens) slice frames  [+ trackers + AMR grid]
+    temperature   # temperature slice frames      [+ trackers + AMR grid]
+    s00           # electron fraction (s_00) frames
     # s00_avg       # area-weighted average Y_e vs time (1-D timeseries)
     ynue          # neutrino fraction Y_nue  = n_nue/n_b  [bns.prim_xy + bns.m1ff_xy n:0]
     # ynua          # neutrino fraction Y_anue = n_anue/n_b [bns.prim_xy + bns.m1ff_xy n:1]
