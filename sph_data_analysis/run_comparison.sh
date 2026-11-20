@@ -8,10 +8,12 @@
 # regeneration).
 #
 # Usage:
-#   bash run_comparison.sh                 # uses the MODELS list below
+#   bash run_comparison.sh                 # models from config.ini (or MODELS)
 #   bash run_comparison.sh DIR1 LABEL1 DIR2 LABEL2 [...]   # override on CLI
 #
-# Edit the MODELS list below (one "analysis_dir|label" per model), then run.
+# By default the models are the simulations listed in config.ini (`simpath`
+# lines), each with its <simpath>/analysis directory; those without one yet
+# are left out.  Or fill the MODELS list below (one "analysis_dir|label" each).
 # First model is drawn solid, second dashed, third dotted, fourth dash-dot.
 # =============================================================================
 
@@ -25,21 +27,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Models to overlay: one "analysis_dir|legend label" per line (2 to 4 models).
 # Each analysis_dir must contain the merger_time.txt / Lnu_E_*.txt / Eav_*.txt
-# produced by run_analysis.sh.
-MODELS=(
-    "/lus/flare/projects/CompactBinaryMerger/yiqiu/Large_sim/bundle_run/VVLR_test_17/analysis|eq (w/ NEPS)"
-    "/lus/flare/projects/CompactBinaryMerger/yiqiu/Large_sim/bundle_run/VVLR_test_10/analysis|non-eq (w/ NEPS)"
-)
-
-MODELS=(
-    "/lus/flare/projects/CompactBinaryMerger/yiqiu/Large_sim/bundle_run/VVLR/analysis|eq (w/ number NEPS)"
-    "/lus/flare/projects/CompactBinaryMerger/yiqiu/Large_sim/bundle_run/VVLR_eq/analysis|eq (w/o number NEPS)"
-)
-
-MODELS=(
-    "/lus/flare/projects/CompactBinaryMerger/yiqiu/Large_sim/bundle_run/VVLR_test_dm/analysis|fixed_dm"
-    "/lus/flare/projects/CompactBinaryMerger/yiqiu/Large_sim/bundle_run/VVLR_eq/analysis|baseline"
-)
+# produced by run_analysis.sh.  Empty = the simulations listed in config.ini, e.g.
+#   "/lus/flare/projects/CompactBinaryMerger/yiqiu/Large_sim/bundle_run/VVLR_eq/analysis|baseline"
+MODELS=()
 
 # Alternate Perlmutter comparison (or supply these DIR/LABEL pairs on the CLI):
 # "/pscratch/sd/y/yiqiu/TOV_test_athenaK/lorene_bns/DD2_m1_nn_opacity/VVLR/analysis|Baseline"
@@ -80,6 +70,21 @@ fi
 # SETUP  — machine environment from config.ini (env_setup: module/conda/venv)
 # ─────────────────────────────────────────────────────────────────────────────
 source "${SCRIPT_DIR}/../load_config.sh"
+
+if [[ ${#MODELS[@]} -eq 0 ]]; then
+    while IFS= read -r sim; do
+        if [[ -d "${sim%%|*}/analysis" ]]; then
+            MODELS+=("${sim%%|*}/analysis|${sim#*|}")
+        else
+            echo "  [skip] ${sim#*|}: no analysis directory yet (${sim%%|*}/analysis)"
+        fi
+    done < <(_cfg_sims)
+fi
+if [[ ${#MODELS[@]} -lt 2 ]]; then
+    echo "ERROR: need at least two models with an analysis directory (set MODELS," \
+         "pass them on the command line, or list simulations in ${CONFIG_FILE})."
+    exit 1
+fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Build comparison_plot.py args from MODELS

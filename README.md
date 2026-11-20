@@ -79,6 +79,33 @@ This reads `simpath`/`figpath` from `config.ini`, renders the `SECTIONS` selecte
 inside `BNS_all.sh`, writes frames to `figpath` (default `<simpath>/Figs`), and
 assembles movies into `<figpath>/all_movies/`.
 
+### Several simulations at once
+
+List each simulation as its own `simpath` line in `config.ini`, optionally with a
+legend label after `|` (default: the folder name); commented lines are skipped:
+
+```ini
+simpath = /path/to/run_A | base
+simpath = /path/to/run_B | nucl
+#simpath = /path/to/run_C
+```
+
+`BNS_all.sh`, `BNS_3d.sh` and `sph_data_analysis/run_analysis.sh` then run once per
+simulation, one after the other, and report the ones that failed; the per-run
+keys `figpath` and `t_merger` must stay blank. `BNS_compare.sh` and
+`sph_data_analysis/run_comparison.sh` compare these simulations unless their own
+`RUNS`/`MODELS` lists or command-line arguments say otherwise.
+
+```bash
+bash run_all.sh                    # all steps below, for all simulations
+bash run_all.sh --only analysis,run_comparison
+```
+
+`run_all.sh` runs, in order: `BNS_all.sh` and `run_analysis.sh` for each
+simulation, then `BNS_compare.sh` and `run_comparison.sh` once for all of them
+(the latter only for simulations with an analysis directory), and ends with a
+summary of what ran, was skipped or failed.
+
 ### Driver directly
 
 `BNS_all.py` takes all configuration on the command line — no editing required:
@@ -245,8 +272,8 @@ All **machine-specific** settings live in a single file, `config.ini` — copied
 from `config.example.ini` and **gitignored**, so nothing machine-local gets
 committed. It holds both:
 
-* **paths** — `simpath`, optional `figpath`, and (for `sph_data_analysis`)
-  `eos_table` / `pythonpath_extra`, and
+* **paths** — `simpath` (one line per simulation, see above), optional
+  `figpath`, and (for `sph_data_analysis`) `eos_table` / `pythonpath_extra`, and
 * **environment** — `env_setup`, the one command run to activate your toolchain
   (`module load python`, `conda activate …`, `source …/activate`).
 

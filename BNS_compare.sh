@@ -9,7 +9,7 @@
 # multi-folder convention of sph_data_analysis/run_comparison.sh.
 #
 # Usage:
-#   bash BNS_compare.sh                               # uses RUNS / VARS below
+#   bash BNS_compare.sh                               # runs from config.ini
 #   bash BNS_compare.sh DIR1 LABEL1 DIR2 LABEL2 [...] # override the runs on CLI
 # =============================================================================
 
@@ -21,10 +21,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # ─────────────────────────────────────────────────────────────────────────────
 # Two or more runs: "run_dir|label".  Each run_dir contains output-*/ (or the
 # .hst files directly).  The slice comparison needs exactly two runs.
-RUNS=(
-    "/lus/flare/projects/CompactBinaryMerger/yiqiu/Large_sim/bundle_run/VVLR_test_2|eq"
-    "/lus/flare/projects/CompactBinaryMerger/yiqiu/Large_sim/bundle_run/VVLR_test_3|non-eq"
-)
+# Empty = the simulations listed in config.ini (its `simpath` lines), e.g.
+#   "/lus/flare/projects/CompactBinaryMerger/yiqiu/Large_sim/bundle_run/VVLR_test_2|eq"
+RUNS=()
 
 # Variables to compare, as base:species  (nue=0, anue=1, nux=2, anux=3).
 # bases: eta_0 eta_1 abs_0 abs_1 E N
@@ -61,6 +60,15 @@ fi
 # SETUP  — machine environment from config.ini (env_setup: module/conda/venv)
 # ─────────────────────────────────────────────────────────────────────────────
 source "${SCRIPT_DIR}/load_config.sh"
+
+if [[ ${#RUNS[@]} -eq 0 ]]; then
+    mapfile -t RUNS < <(_cfg_sims)
+fi
+if [[ ${#RUNS[@]} -lt 2 ]]; then
+    echo "ERROR: need at least two runs (set RUNS, pass them on the command line," \
+         "or list them as simpath lines in ${CONFIG_FILE})."
+    exit 1
+fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 ARGS=()
