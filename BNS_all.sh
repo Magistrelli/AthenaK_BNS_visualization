@@ -23,6 +23,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # All machine-specific settings (paths + environment) come from config.ini.
 # load_config.sh reads it, defines _cfg_get, and activates the environment.
 source "${SCRIPT_DIR}/load_config.sh"
+# Several simulations in config.ini: run this script once for each of them.
+_for_each_sim "$@"
 
 SIMPATH="$(_cfg_get simpath)"
 FIGPATH="$(_cfg_get figpath)"

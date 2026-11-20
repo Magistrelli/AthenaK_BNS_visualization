@@ -23,6 +23,8 @@ PLOTTOOLS="${REPO_DIR}/plot-tools"
 # All machine-specific settings (paths + environment) come from config.ini.
 # load_config.sh reads it, defines _cfg_get, and activates the environment.
 source "${REPO_DIR}/load_config.sh"
+# Several simulations in config.ini: run this script once for each of them.
+_for_each_sim "$@"
 
 SIMPATH="$(_cfg_get simpath)"
 EOS_TABLE="$(_cfg_get eos_table)"

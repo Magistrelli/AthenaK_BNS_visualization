@@ -22,6 +22,8 @@ PLOT3D_DIR="${SCRIPT_DIR}/plot_3d_data"
 # All machine-specific settings (paths + environment) come from config.ini.
 # load_config.sh reads it, defines _cfg_get, and activates the environment.
 source "${SCRIPT_DIR}/load_config.sh"
+# Several simulations in config.ini: run this script once for each of them.
+_for_each_sim "$@"
 
 SIMPATH="$(_cfg_get simpath)"
 PYTHONPATH_EXTRA="$(_cfg_get pythonpath_extra)"
