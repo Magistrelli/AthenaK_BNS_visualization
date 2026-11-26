@@ -36,7 +36,7 @@ PLANE=xz               # xz | xy  (xy needs genuine *_xy dumps of each variable)
 NX=400; NZ=400         # rasterization resolution of the common grid
 RMAX=3.0               # ratio panel spans 1/RMAX .. RMAX  (white = equal)
 EVERY=1                # use every Nth matched time
-OUTDIR="${SCRATCH}/athenak/comparisons/compare_${PLANE}"    # empty = <run A>/compare_<PLANE>/
+OUTDIR="${SCRATCH}/comparisons/compare_${PLANE}"    # empty = <run A>/compare_<PLANE>/
 
 SKIP_EXISTING=true     # keep frames already rendered from the same data and settings
 
