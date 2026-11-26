@@ -109,6 +109,76 @@ def load_ejecta_summary(adir, t_merger):
     return out
 
 
+def ejecta_cache(adir, summary, t_merger):
+    """The per-snapshot ejecta histograms behind `summary`, from the analysis cache.
+
+    analyze_ejecta.py sums its histograms over the post-merger window when it
+    runs; to re-sum them over another window, take the cached per-snapshot
+    histograms (cache/ejecta-*/ next to the outputs, also behind symlinked
+    outputs) of the snapshots in the outputs.  The cache whose sum up to the
+    outputs' window end gives back the Mej_Ye_geo.txt on disk is used.
+    Returns a dict (snapshot times [ms after merger], records, theta bin
+    widths, last time with histograms t_end) or None.  Caches written before
+    analyze_ejecta.py kept the histograms of every snapshot end at the window.
+    """
+    import ast
+    import glob
+    import json
+    from utils_ejecta import sum_over_time
+
+    dirs = {adir, os.path.dirname(os.path.realpath(os.path.join(adir, 'Mej_Ye_geo.txt')))}
+    t_used = np.loadtxt(os.path.join(adir, 'Mej_rate_geo.txt'))[:, 0]
+    ye_file = summary['geo']['ye'][:, 1]
+    for cdir in sorted(c for d in dirs for c in glob.glob(os.path.join(d, 'cache', 'ejecta-*'))):
+        recs = {}
+        for part in sorted(glob.glob(os.path.join(cdir, 'part-*.npz'))):
+            with np.load(part, allow_pickle=True) as z:
+                for idx, rec in zip(z['idx'], z['rec']):
+                    if isinstance(rec, np.ndarray) and rec.ndim == 0:
+                        rec = rec.item()
+                    recs[int(idx)] = rec
+        recs = sorted((r for r in recs.values()
+                       if 'hist2d_geo' in r and np.isclose(t_used, r['time']).any()),
+                      key=lambda r: r['time'])
+        # The outputs sum the snapshots up to their own window end; the cache
+        # also holds the histograms of the later snapshots.
+        t = np.array([r['time'] for r in recs])
+        ye = np.array([r['hist_ye_geo'] for r in recs]) if recs else None
+        if not any(np.allclose(sum_over_time(ye[:k], t[:k]), ye_file,
+                               rtol=1e-4, atol=1e-6 * ye_file.max())
+                   for k in range(len(recs), 1, -1)):
+            continue
+        with open(os.path.join(cdir, 'meta.json')) as fh:
+            edges = np.array(ast.literal_eval(json.load(fh)['params']['theta_edges']))
+        t_ms = (t - t_merger) * MSUN_TO_MS
+        return dict(t=t, t_ms=t_ms, recs=recs, dtheta=np.diff(edges), t_end=t_ms[-1])
+    return None
+
+
+def ejecta_until(summary, cache, t_end):
+    """Copy of `summary` with its distributions summed up to t_end [ms after merger]."""
+    from utils_ejecta import sum_over_time
+
+    keep = cache['t_ms'] <= t_end + 1e-9
+    t = cache['t'][keep]
+    recs = [r for r, k in zip(cache['recs'], keep) if k]
+
+    def total(key):
+        return sum_over_time(np.array([r[key] for r in recs]), t)
+
+    out = {'t_hist': float(cache['t_ms'][keep][-1])}
+    for c in CRIT_NAME:
+        d = {k: v.copy() for k, v in summary[c].items()}
+        h2d = total(f'hist2d_{c}')                       # (v_inf, theta)
+        d['vinf'][:, 1] = h2d.sum(axis=1)
+        d['rhoej'][:, 1] = h2d.sum(axis=0) / cache['dtheta']
+        d['ye'][:, 1] = total(f'hist_ye_{c}')
+        d['T'][:, 1] = total(f'hist_T_{c}')
+        d['s'][:, 1] = total(f'hist_s_{c}')
+        out[c] = d
+    return out
+
+
 def _ejecta_lines(models):
     """(data, color, line style, legend name) of every curve of an ejecta figure.
 

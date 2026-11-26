@@ -14,9 +14,10 @@ analysis directory (no data regeneration).  Both models are drawn on one figure:
 With --ejecta-out / --ejecta-time-out it also overlays the models' ejecta
 figures fig_ejecta.pdf / fig_ejecta_time.pdf of plot_analysis.py (from the
 analyze_ejecta.py outputs), with one color per model and one line style per
-ejecta criterion (geodesic solid, Bernoulli dashed).  The
-distributions cover each model's post-merger window (T_POST_MS in
-run_analysis.sh), which must match.
+ejecta criterion (geodesic solid, Bernoulli dashed).  In the distributions
+figure all models are summed up to the last post-merger time they have in
+common, re-summed from each model's analysis cache (if a cache is missing,
+each model keeps its own window, T_POST_MS in run_analysis.sh).
 
 Example
 -------
@@ -37,7 +38,8 @@ from matplotlib.lines import Line2D
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import plot_style  # central house style (repo root); see plot_style.py
-from plot_analysis import load_ejecta_summary, plot_ejecta, plot_ejecta_time
+from plot_analysis import (load_ejecta_summary, ejecta_cache, ejecta_until,
+                           plot_ejecta, plot_ejecta_time)
 
 plot_style.use()
 
@@ -199,7 +201,21 @@ def main():
         ejecta = [(lab, col, load_ejecta_summary(d, m['t_merger']))
                   for lab, col, d, m in zip(labels, MODEL_COLORS, dirs, models)]
     if args.ejecta_out:
-        plot_ejecta(ejecta, os.path.join(outdir, args.ejecta_out),
+        # Distributions of all models over the same post-merger window: the
+        # last time they all have histograms for, re-summed from their caches.
+        caches = [ejecta_cache(d, e, m['t_merger'])
+                  for d, (_, _, e), m in zip(dirs, ejecta, models)]
+        dist = ejecta
+        if all(c is not None for c in caches):
+            t_common = min(c['t_end'] for c in caches)
+            dist = [(lab, col, ejecta_until(e, c, t_common))
+                    for (lab, col, e), c in zip(ejecta, caches)]
+            print(f"  ejecta distributions up to the common t - t_merger = {t_common:.2f} ms")
+        else:
+            missing = [lab for (lab, _, _), c in zip(ejecta, caches) if c is None]
+            print("  WARNING: no usable ejecta cache for " + ", ".join(missing)
+                  + "; distributions keep each model's own window")
+        plot_ejecta(dist, os.path.join(outdir, args.ejecta_out),
                     'BNS SPH — Ejecta mass distributions: model comparison')
     if args.ejecta_time_out:
         plot_ejecta_time(ejecta, os.path.join(outdir, args.ejecta_time_out),

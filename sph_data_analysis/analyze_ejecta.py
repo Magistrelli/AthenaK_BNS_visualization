@@ -465,18 +465,19 @@ def main():
         enabled=USE_CACHE)
     cached = cache.load()
 
-    # A cached record is only reusable if it already holds the 2-D histograms
-    # this run needs. T_STOP (i.e. the merger time) is NOT part of the cache
-    # key, so a snapshot cached while it was outside the post-merger window has
-    # no histograms and must be redone if the window now includes it.
+    # The workers compute the per-snapshot histograms of EVERY snapshot (window
+    # end passed as +inf), and only the reduction below sums them up to T_STOP.
+    # So the cache can also be re-summed over other windows, e.g. the last time
+    # all models of a comparison share (comparison_plot.py).  A cached record
+    # without histograms (from before) is redone once.
     results, jobs = [], []
     for i in indices:
         args = _paths(index_map[i], i) + (riemann_weights, theta_edges,
-                                          DFLOOR, T_STOP)
+                                          DFLOOR, np.inf)
         rec  = cached.get(i)
         if (rec is not None
                 and rec.get('_src') == _src_stamp(args[0])     # same input file
-                and (rec['time'] > T_STOP or 'hist2d_geo' in rec)):
+                and 'hist2d_geo' in rec):
             results.append(rec)
         else:
             jobs.append((i, args))
