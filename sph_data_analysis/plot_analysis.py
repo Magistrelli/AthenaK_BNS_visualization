@@ -53,8 +53,8 @@ def _fmt_mass(m):
     return f'{m:.2e}'.replace('e-0', 'e-').replace('e+0', 'e')
 
 
-# Ejecta criteria: one color each.  A single model also gets one line style per
-# criterion; in a model comparison the line style tells the models apart.
+# Ejecta criteria: one line style each.  A single model also gets one color per
+# criterion; in a model comparison the color tells the models apart.
 CRIT_NAME  = {'geo': 'geodesic', 'Ber': 'Bernoulli'}
 CRIT_COLOR = {'geo': 'tab:blue', 'Ber': 'tab:orange'}
 CRIT_LS    = {'geo': '-', 'Ber': '--'}
@@ -112,14 +112,14 @@ def load_ejecta_summary(adir, t_merger):
 def _ejecta_lines(models):
     """(data, color, line style, legend name) of every curve of an ejecta figure.
 
-    ``models`` is a list of (label, line style, load_ejecta_summary(...)); a
-    single model is passed as (None, None, summary).
+    ``models`` is a list of (label, color, load_ejecta_summary(...)); a single
+    model is passed as (None, None, summary).
     """
     multi = len(models) > 1
-    for label, mls, m in models:
+    for label, mcol, m in models:
         for c in CRIT_NAME:
             name = f'{label} {CRIT_NAME[c]}' if multi else CRIT_NAME[c]
-            yield m[c], CRIT_COLOR[c], mls or CRIT_LS[c], name
+            yield m[c], mcol or CRIT_COLOR[c], CRIT_LS[c], name
 
 
 def plot_ejecta(models, out, title):

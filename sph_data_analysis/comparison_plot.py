@@ -13,7 +13,8 @@ analysis directory (no data regeneration).  Both models are drawn on one figure:
 
 With --ejecta-out / --ejecta-time-out it also overlays the models' ejecta
 figures fig_ejecta.pdf / fig_ejecta_time.pdf of plot_analysis.py (from the
-analyze_ejecta.py outputs), with the same line style per model.  The
+analyze_ejecta.py outputs), with one color per model and one line style per
+ejecta criterion (geodesic solid, Bernoulli dashed).  The
 distributions cover each model's post-merger window (T_POST_MS in
 run_analysis.sh), which must match.
 
@@ -50,6 +51,7 @@ SPECIES   = ['nue', 'nua', 'nux', 'anux']
 SP_LABEL  = [r'$\nu_e$', r'$\bar\nu_e$', r'$\nu_x$', r'$\bar\nu_x$']
 SP_COLOR  = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red']
 LINESTYLES = ['-', '--', ':', '-.']
+MODEL_COLORS = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red']   # ejecta figures
 
 
 def read_merger_time(analysis_dir):
@@ -194,8 +196,8 @@ def main():
     print(f"  x-range: [{xlo:.2f}, {xhi:.2f}] ms about merger")
 
     if args.ejecta_out or args.ejecta_time_out:
-        ejecta = [(lab, ls, load_ejecta_summary(d, m['t_merger']))
-                  for lab, ls, d, m in zip(labels, styles, dirs, models)]
+        ejecta = [(lab, col, load_ejecta_summary(d, m['t_merger']))
+                  for lab, col, d, m in zip(labels, MODEL_COLORS, dirs, models)]
     if args.ejecta_out:
         plot_ejecta(ejecta, os.path.join(outdir, args.ejecta_out),
                     'BNS SPH — Ejecta mass distributions: model comparison')
