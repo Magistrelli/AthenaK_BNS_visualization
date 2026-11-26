@@ -18,6 +18,7 @@ vorticity, and the Q-criterion.
 
 | File | Purpose |
 |------|---------|
+| `run_all.sh` | Runs everything for all simulations in `config.ini`: `BNS_all.sh` and `run_analysis.sh` per simulation, then `BNS_compare.sh` and `run_comparison.sh` (see Usage). |
 | `BNS_all.py` | Main visualization driver. Fully configurable via command-line flags (`--help`). File names are keyed on `--jobname` (default `bns`), so the same driver serves BNS/BHNS/BBH runs; each frame series is written to its own `Figs/<name>_xy/` subfolder, and sections whose input files are absent are skipped. |
 | `BNS_all.sh` | Convenience wrapper: reads paths from `config.ini`, builds the argument list (incl. `JOBNAME`), runs `BNS_all.py`, then `make_movies.sh`. |
 | `BNS_3d.sh` | 3-D driver: renders `bns.prim3D` snapshots as PyVista isosurfaces + Matplotlib orthoslices, then makes movies. Uses `plot_3d_data/`. |
@@ -69,17 +70,24 @@ python3.12 -m pip install --target ~/.python-extra/py312 pyvista imageio-ffmpeg 
 
 ## Usage
 
-### Full pipeline (frames + movies)
+### Full pipeline (`run_all.sh`)
 
 ```bash
-bash BNS_all.sh
+bash run_all.sh                    # all steps, for all simulations in config.ini
+bash run_all.sh --only analysis,run_comparison
+bash run_all.sh --skip bns_all
 ```
 
-This reads `simpath`/`figpath` from `config.ini`, renders the `SECTIONS` selected
-inside `BNS_all.sh`, writes frames to `figpath` (default `<simpath>/Figs`), and
-assembles movies into `<figpath>/all_movies/`.
+Runs, in order: `BNS_all.sh` (history plots, frames, movies) and
+`sph_data_analysis/run_analysis.sh` (merger time, ejecta, neutrinos) for each
+simulation listed in `config.ini`, then `BNS_compare.sh` and
+`sph_data_analysis/run_comparison.sh` once for all of them (the comparisons need
+at least two simulations; `run_comparison.sh` only takes those with an analysis
+directory). A failing simulation does not stop the others; the run ends with a
+summary of what ran, was skipped or failed. Each script keeps its own settings
+(see its header and the sections below), and reruns only redo what changed.
 
-### Several simulations at once
+### Several simulations
 
 List each simulation as its own `simpath` line in `config.ini`, optionally with a
 legend label after `|` (default: the folder name); commented lines are skipped:
@@ -96,15 +104,15 @@ keys `figpath` and `t_merger` must stay blank. `BNS_compare.sh` and
 `sph_data_analysis/run_comparison.sh` compare these simulations unless their own
 `RUNS`/`MODELS` lists or command-line arguments say otherwise.
 
+### Frames and movies only (`BNS_all.sh`)
+
 ```bash
-bash run_all.sh                    # all steps below, for all simulations
-bash run_all.sh --only analysis,run_comparison
+bash BNS_all.sh
 ```
 
-`run_all.sh` runs, in order: `BNS_all.sh` and `run_analysis.sh` for each
-simulation, then `BNS_compare.sh` and `run_comparison.sh` once for all of them
-(the latter only for simulations with an analysis directory), and ends with a
-summary of what ran, was skipped or failed.
+This reads `simpath`/`figpath` from `config.ini`, renders the `SECTIONS` selected
+inside `BNS_all.sh`, writes frames to `figpath` (default `<simpath>/Figs`), and
+assembles movies into `<figpath>/all_movies/`.
 
 ### Driver directly
 
