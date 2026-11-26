@@ -42,6 +42,7 @@ from athplot.tracker import Tracker
 sys.path.append(_HERE)
 import athenak_units as au
 import bns_nurates_recon as recon
+import frame_cache
 import plot_style
 
 # ---------------------------------------------------------------------------
@@ -814,13 +815,28 @@ def render_frames_all(output_dirs, figpath, file_prefix, var_name,
     figpath = os.path.join(figpath, f"{_name}_xy")
     os.makedirs(figpath, exist_ok=True)
 
+    # Frames already rendered from the same inputs with the same settings are
+    # kept (also when packed into frames.tar after the movie was made).
+    series = frame_cache.FrameSeries(figpath, dict(
+        var=var_name, cmap=getattr(cmap, "name", cmap),
+        norm=None if norm is None else [type(norm).__name__, norm.vmin, norm.vmax],
+        vmin=vmin, vmax=vmax, label=label, xlim=xlim, ylim=ylim, step=step,
+        scale=scale_factor, use_abs=use_abs, refinement=show_refinement,
+        trackers=bool(show_trackers), coord_scale=coord_scale,
+        derived=None if derived is None else derived.get("name")))
+
+    def _frame(gi):
+        return f"{out_prefix}_{gi:05d}.png"
+
     if skip_existing:
-        frames = [(gi, xy, xz) for gi, xy, xz in frames
-                  if not os.path.exists(os.path.join(figpath, f"{out_prefix}_{gi:05d}.png"))]
+        todo = [(gi, xy, xz) for gi, xy, xz in frames
+                if not series.done(_frame(gi), (xy, xz))]
+        n_done, frames = len(frames) - len(todo), todo
         if not frames:
-            print(f"  All frames already exist, skipping '{var_name}'")
+            series.save()
+            print(f"  All {n_done} frames up to date, skipping '{var_name}'")
             return
-        print(f"  Skipping existing, rendering {len(frames)} new frame(s)")
+        print(f"  {n_done} frame(s) up to date, rendering {len(frames)} new or changed")
 
     zlim = (0, ylim[1]) if ylim is not None else (0, None)
     plot_kwargs = dict(cmap=cmap, interpolation="nearest", rescale=scale_factor)
@@ -845,6 +861,9 @@ def render_frames_all(output_dirs, figpath, file_prefix, var_name,
     with multiprocessing.Pool(n_workers) as pool:
         pool.map(_render_frame_worker_all, worker_args)
 
+    for gi, xy, xz in frames:
+        series.record(_frame(gi), (xy, xz))
+    series.save()
     print(f"  Rendered {len(frames)} frames for '{var_name}'")
 
 
@@ -991,7 +1010,8 @@ def render_avg_energy_all(output_dirs, figpath, print_minmax=False,
                           derived_kind='avg_energy',
                           e_spec=None, n_spec=None,
                           coord_scale=1.0,
-                          coord_label=r"\mathrm{M}_\odot"):
+                          coord_label=r"\mathrm{M}_\odot",
+                          skip_existing=False):
     """
     Derived quantity from a pair of per-cell fields, rendered in parallel across
     all segments.  Frames are deduplicated by sim time.
@@ -1041,6 +1061,27 @@ def render_avg_energy_all(output_dirs, figpath, print_minmax=False,
     figpath = os.path.join(figpath, f"{_name}_xy")
     os.makedirs(figpath, exist_ok=True)
 
+    # Frames already rendered from the same inputs with the same settings are
+    # kept (also when packed into frames.tar after the movie was made).
+    series = frame_cache.FrameSeries(figpath, dict(
+        var=var_key, kind=derived_kind, species=species, e=e_var, n=n_var,
+        norm=[type(_norm).__name__, _norm.vmin, _norm.vmax], scale=_sc, label=_lb,
+        xlim=xlim, ylim=ylim, refinement=show_refinement,
+        trackers=bool(show_trackers), coord_scale=coord_scale))
+
+    def _frame(idx):
+        return f"{out_prefix}_{idx:05d}.png"
+
+    frames = list(enumerate(pairs))
+    if skip_existing:
+        todo = [(idx, p) for idx, p in frames if not series.done(_frame(idx), p[1:])]
+        n_done, frames = len(frames) - len(todo), todo
+        if not frames:
+            series.save()
+            print(f"  All {n_done} {out_prefix} frames up to date, skipping")
+            return
+        print(f"  {n_done} frame(s) up to date, rendering {len(frames)} new or changed")
+
     zlim = (0, ylim[1]) if ylim is not None else (0, None)
     worker_args = [
         dict(global_idx=idx,
@@ -1059,14 +1100,17 @@ def render_avg_energy_all(output_dirs, figpath, print_minmax=False,
              n_var=n_var,
              out_prefix=out_prefix,
              coord_scale=coord_scale, coord_label=coord_label)
-        for idx, (_t, e_fpath, n_fpath) in enumerate(pairs)
+        for idx, (_t, e_fpath, n_fpath) in frames
     ]
 
     n_workers = min(multiprocessing.cpu_count(), len(worker_args))
     with multiprocessing.Pool(n_workers) as pool:
         pool.map(_render_avg_energy_worker_all, worker_args)
 
-    print(f"  Rendered {len(pairs)} {out_prefix} frames")
+    for idx, p in frames:
+        series.record(_frame(idx), p[1:])
+    series.save()
+    print(f"  Rendered {len(frames)} {out_prefix} frames")
 
 
 def _compute_s00_avg_worker_fpath(fpath):
@@ -1613,7 +1657,8 @@ def main():
                               show_trackers=show_trackers, show_refinement=True,
                               trackers=trackers, xlim=XY_LIM, ylim=XY_LIM,
                               units=units,
-                              coord_scale=coord_scale, coord_label=coord_label)
+                              coord_scale=coord_scale, coord_label=coord_label,
+                              skip_existing=skip_existing)
 
     _NU_ENERGY_SECTIONS = [
         ("nu_energy",  0, r"$\nu_e$"),
@@ -1629,7 +1674,8 @@ def main():
                                   units=units, species=_sp,
                                   out_prefix=f"{JOBNAME}_frame_{_sec}",
                                   var_key='nu_energy',
-                                  coord_scale=coord_scale, coord_label=coord_label)
+                                  coord_scale=coord_scale, coord_label=coord_label,
+                                  skip_existing=skip_existing)
 
     # bns_nurates thick-distribution reconstruction (y, eta_t, temp_t) from the
     # per-species FLUID-frame M1 moments J, n (rad_J / rad_n outputs -- NOT the
@@ -1655,7 +1701,8 @@ def main():
                                   units=units, species=0,
                                   out_prefix=f"{JOBNAME}_frame_{_sec}",
                                   var_key=_sec, derived_kind=_sec,
-                                  coord_scale=coord_scale, coord_label=coord_label)
+                                  coord_scale=coord_scale, coord_label=coord_label,
+                                  skip_existing=skip_existing)
 
     # Same reconstruction for the heavy leptons (nux, species 2).  The nux_*
     # kinds apply the M1 mu+tau 0.5 weighting to J:2 / n:2 (see
@@ -1676,7 +1723,8 @@ def main():
                                   units=units, species=2,
                                   out_prefix=f"{JOBNAME}_frame_{_sec}",
                                   var_key=_sec, derived_kind=_sec,
-                                  coord_scale=coord_scale, coord_label=coord_label)
+                                  coord_scale=coord_scale, coord_label=coord_label,
+                                  skip_existing=skip_existing)
 
     # Neutrino number fraction per baryon Y_nu = n_nu / n_b : a cross-file
     # quantity pairing the fluid-frame number density n_nu (rad_n, 'n:0') with
@@ -1692,7 +1740,8 @@ def main():
                               var_key='nu_Ynu', derived_kind='nu_Ynu',
                               e_spec=(*_RAD_n, "n:0"),
                               n_spec=(f"{JOBNAME}.prim_xy",  f"{JOBNAME}.prim_xy",  "dens"),
-                              coord_scale=coord_scale, coord_label=coord_label)
+                              coord_scale=coord_scale, coord_label=coord_label,
+                              skip_existing=skip_existing)
 
     print("\nDone.")
 

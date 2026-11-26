@@ -257,6 +257,18 @@ bash make_movies.sh <fps> <stride> <FIGPATH>
 bash make_movies.sh 15 10 /path/to/run/Figs
 ```
 
+### Reruns only redo what changed
+
+With `SKIP_EXISTING=true` (default in `BNS_all.sh` and `BNS_compare.sh`) a frame
+is only rendered again if its input files (name, size, modification time) or
+the plot settings of its series changed; each frame folder records this in
+`frames.json` (`frame_cache.py`). A movie is only re-encoded when its frames
+or movie settings changed (`movie_tools.sh`, shared by `make_movies.sh` and
+`BNS_compare.sh`). Afterwards the frames are packed, unchanged, into
+`<folder>/frames.tar` (`PACK_FRAMES=1`; `tar -xf frames.tar` restores the PNGs),
+and unpacked again automatically when new frames need a new movie. The SPH
+analysis (`run_analysis.sh`) likewise reuses its per-snapshot cache.
+
 ### Time-per-cycle diagnostic
 
 ```bash

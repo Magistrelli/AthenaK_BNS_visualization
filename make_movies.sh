@@ -6,6 +6,9 @@
 #   * flat sequences             <prefix>_NNNNN.png          (3-D BNS_3d: iso_*,
 #                                                             ortho_*; legacy 2-D)
 # STRIDE controls sub-sampling: 1 = every frame, 10 = every 10th frame, etc.
+# In the subfolder layout, a movie is only re-encoded when its frames or
+# settings changed, and afterwards its frames are packed into
+# <subfolder>/frames.tar (PACK_FRAMES; see movie_tools.sh).
 #
 # Usage:
 #   bash make_movies.sh               # use settings below
@@ -44,6 +47,11 @@ CRF=18
 # Video encoder.  Leave empty for auto-detection (recommended).
 # Override if needed, e.g.:  VCODEC="mpeg4"
 VCODEC=""
+
+# 1 = once a subfolder's movie is made, pack its frames into frames.tar (exact
+# copies, `tar -xf frames.tar` restores them) instead of keeping thousands of
+# PNGs; reruns unpack them when new frames need a new movie.  Env overrides.
+PACK_FRAMES="${PACK_FRAMES:-1}"
 # ---------------------------------------------------------------------------
 
 # Command-line overrides
@@ -52,72 +60,10 @@ STRIDE="${2:-${STRIDE}}"
 FIGPATH="${3:-${FIGPATH}}"
 
 # ---------------------------------------------------------------------------
-# Locate an ffmpeg binary. Prefer one already in PATH; otherwise try the Lmod
-# `ffmpeg` module (Aurora ships ffmpeg/7.1), then the pip-installed
-# imageio-ffmpeg binary (the same one BNS_3d.sh uses). This lets make_movies.sh
-# run standalone, not only when BNS_all.sh has already `module load ffmpeg`-ed.
+# ffmpeg, encoder and the per-folder movie logic are shared with BNS_compare.sh.
 # ---------------------------------------------------------------------------
-FFMPEG=""
-if command -v ffmpeg &>/dev/null; then
-    FFMPEG="ffmpeg"
-else
-    if ! command -v module &>/dev/null; then
-        for _init in "${MODULESHOME:-/usr/share/lmod/lmod}/init/bash" \
-                     /etc/profile.d/lmod.sh /etc/profile.d/z00_lmod.sh; do
-            [[ -r "${_init}" ]] && source "${_init}" && break
-        done
-    fi
-    command -v module &>/dev/null && module load ffmpeg &>/dev/null
-    if command -v ffmpeg &>/dev/null; then
-        FFMPEG="ffmpeg"
-    else
-        # Fall back to imageio-ffmpeg's bundled binary. Read pythonpath_extra
-        # from config.ini (next to this script) so the import can be found.
-        _SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-        _PPX="$(awk -F= '/^[[:space:]]*#/{next}
-            /^[[:space:]]*pythonpath_extra[[:space:]]*=/{
-                gsub(/^[[:space:]]+|[[:space:]]+$/,"",$2); print $2; exit}' \
-            "${_SCRIPT_DIR}/config.ini" 2>/dev/null)"
-        command -v module &>/dev/null && module load python/3.12.12 &>/dev/null
-        for _py in python3.12 python3 python; do
-            command -v "${_py}" &>/dev/null || continue
-            FFMPEG="$(PYTHONPATH="${_PPX}:${PYTHONPATH:-}" "${_py}" -c \
-                "import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())" 2>/dev/null)"
-            [[ -n "${FFMPEG}" ]] && break
-            FFMPEG=""
-        done
-    fi
-fi
-
-if [[ -z "${FFMPEG}" ]]; then
-    echo "ERROR: ffmpeg not found."
-    echo "  On Aurora:   module load ffmpeg"
-    echo "  or install:  python3.12 -m pip install --target <pythonpath_extra> imageio-ffmpeg"
-    echo "  or conda:    conda install -c conda-forge ffmpeg"
-    return 1 2>/dev/null || exit 1
-fi
-echo "ffmpeg  : ${FFMPEG}"
-
-# Auto-detect the best available encoder (libx264 > h264_nvenc > libx265 > mpeg4).
-# Falls back to GIF, which is always supported by ffmpeg.
-if [[ -z "${VCODEC}" ]]; then
-    _encoders=$("${FFMPEG}" -hide_banner -encoders 2>/dev/null)
-    for _c in libx264 h264_nvenc libx265 mpeg4; do
-        if echo "${_encoders}" | grep -q " ${_c} "; then
-            VCODEC="${_c}"
-            break
-        fi
-    done
-    [[ -z "${VCODEC}" ]] && VCODEC="gif"
-fi
-echo "Encoder : ${VCODEC}"
-
-# Quality flags (not used for GIF — palette filter handles quality instead)
-case "${VCODEC}" in
-    libx264|libx265|h264_nvenc)  QUALITY_FLAGS=(-crf "${CRF}") ;;
-    gif)                         QUALITY_FLAGS=()               ;;
-    *)                           QUALITY_FLAGS=(-q:v 5)         ;;
-esac
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/movie_tools.sh"
+_movie_setup || { return 1 2>/dev/null || exit 1; }
 
 if [[ ! -d "${FIGPATH}" ]]; then
     echo "ERROR: FIGPATH not found: ${FIGPATH}"
@@ -135,47 +81,6 @@ echo "FIGPATH : ${FIGPATH}"
 echo "FPS     : ${FPS}"
 echo "STRIDE  : ${STRIDE}"
 
-[[ "${VCODEC}" == "gif" ]] && _EXT="gif" || _EXT="mp4"
-
-# ---------------------------------------------------------------------------
-# Encode one movie:  _encode_movie <outfile> <frame> [<frame> ...]
-# ---------------------------------------------------------------------------
-_encode_movie() {
-    local outfile="$1"; shift
-    local listfile; listfile="$(mktemp "${TMPDIR:-/tmp}/mm_fflist.XXXXXX")"
-    local f
-    for f in "$@"; do printf "file '%s'\n" "${f}" >> "${listfile}"; done
-
-    if [[ "${VCODEC}" == "gif" ]]; then
-        # High-quality GIF via palette generation (single-pass filtergraph).
-        "${FFMPEG}" -y \
-            -r "${FPS}" \
-            -f concat -safe 0 -i "${listfile}" \
-            -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse=dither=bayer" \
-            -loop 0 \
-            "${outfile}" \
-            -loglevel warning -stats
-    else
-        "${FFMPEG}" -y \
-            -r "${FPS}" \
-            -f concat -safe 0 -i "${listfile}" \
-            -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" \
-            -c:v "${VCODEC}" -pix_fmt yuv420p \
-            "${QUALITY_FLAGS[@]}" \
-            "${outfile}" \
-            -loglevel warning -stats
-    fi
-    rm -f "${listfile}"
-}
-
-# Return every STRIDEth element of the (already sorted) arguments, one per line.
-_subsample() {
-    local -a all=( "$@" ) out=()
-    local j
-    for (( j=0; j<${#all[@]}; j+=STRIDE )); do out+=("${all[j]}"); done
-    printf '%s\n' "${out[@]}"
-}
-
 _n_made=0
 
 # ---------------------------------------------------------------------------
@@ -189,18 +94,11 @@ shopt -u nullglob
 for d in "${SUBDIRS[@]}"; do
     d="${d%/}"
     [[ "$(basename "${d}")" == "all_movies" ]] && continue
-
     shopt -s nullglob
-    ALL_FRAMES=( "${d}"/*_?????.png )
+    _frames=( "${d}"/*.png "${d}"/frames.tar )
     shopt -u nullglob
-    [[ ${#ALL_FRAMES[@]} -eq 0 ]] && continue
-
-    IFS=$'\n' ALL_FRAMES=( $(printf '%s\n' "${ALL_FRAMES[@]}" | sort) ); unset IFS
-    IFS=$'\n' FRAMES=( $(_subsample "${ALL_FRAMES[@]}") ); unset IFS
-
-    name="$(basename "${d}")"                     # e.g. temperature_xy
-    echo "[${name}]  ${#ALL_FRAMES[@]} available, ${#FRAMES[@]} used  ->  ${name}.${_EXT}"
-    _encode_movie "${MOVIEDIR}/${name}.${_EXT}" "${FRAMES[@]}"
+    [[ ${#_frames[@]} -eq 0 ]] && continue
+    _movie_folder "${d}" "${MOVIEDIR}/$(basename "${d}").${_EXT}"
     _n_made=$((_n_made + 1))
     echo ""
 done

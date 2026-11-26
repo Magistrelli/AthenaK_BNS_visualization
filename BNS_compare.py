@@ -47,6 +47,7 @@ import plot_style                               # noqa: E402
 plot_style.use()  # central house style (see plot_style.py)
 
 from BNS_all import combine_hst
+import frame_cache
 
 # variable shorthand -> per-plane (new dump prefix, old prefix)
 # NB: the "old" fallback (rad_m1_*) is the SPHERICAL-surface dump, not a slice,
@@ -397,6 +398,9 @@ def main():
                     help="Override rate (left panels) color max [display units].")
     ap.add_argument("--outdir", default=None,
                     help="Output dir (default: <run A>/compare_<plane>/).")
+    ap.add_argument("--skip-existing", action="store_true",
+                    help="Keep frames already rendered from the same inputs with the "
+                         "same settings (also when packed into frames.tar).")
     ap.add_argument("--every", type=int, default=1,
                     help="Use every Nth matched time (thin frames).")
     args = ap.parse_args()
@@ -476,18 +480,38 @@ def main():
 
         print(f"[{var}] {len(common)} matched times "
               f"[{common[0]:.0f},{common[-1]:.0f}] M_sun  rate range=[{rv_min:.2e},{rv_max:.2e}]")
-        for i, t in enumerate(common):
+
+        # One folder per variable (one movie each).  Frames already rendered
+        # from the same inputs with the same settings are kept.
+        var_dir = os.path.join(outdir, out_prefix)
+        series = frame_cache.FrameSeries(var_dir, dict(
+            var=var, labels=labels, units=args.units, plane=args.plane,
+            xlim=args.xlim, zlim=args.zlim, nx=args.nx, nz=args.nz,
+            rmax=args.rmax, rate_range=[rv_min, rv_max]))
+
+        def _frame(t):
+            return f"{out_prefix}_{t:09.1f}.png"
+
+        todo = common
+        if args.skip_existing:
+            todo = [t for t in common if not series.done(_frame(t), (tA[t], tB[t]))]
+            if len(todo) < len(common):
+                print(f"  {len(common) - len(todo)} frame(s) up to date, "
+                      f"rendering {len(todo)} new or changed")
+        for i, t in enumerate(todo):
             try:
                 _, med = render_one(var, t, tA[t], tB[t], labels, args.units,
-                                    outdir, out_prefix, args.xlim, args.zlim,
+                                    var_dir, out_prefix, args.xlim, args.zlim,
                                     args.nx, args.nz, args.rmax,
                                     coord_scale, coord_label, vlabel,
                                     rate_vmin=rv_min, rate_vmax=rv_max)
             except Exception as e:
                 print(f"  t={t:.1f} FAILED: {e}"); continue
-            if i == 0 or i == len(common) - 1:
+            series.record(_frame(t), (tA[t], tB[t]))
+            if i == 0 or i == len(todo) - 1:
                 print(f"  t={t:.1f}  median(A/B)={med:.3f}")
-        print(f"  -> {outdir}/{out_prefix}_*.png")
+        series.save()
+        print(f"  -> {var_dir}/{out_prefix}_*.png")
 
 
 if __name__ == "__main__":

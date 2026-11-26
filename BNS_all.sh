@@ -57,6 +57,7 @@ JOBNAME=bns
 # Movie encoding (passed to make_movies.sh)
 MOVIE_FPS=10        # frames per second
 MOVIE_STRIDE=10     # use every Nth frame (1 = all)
+PACK_FRAMES=1       # 1 = after its movie is made, pack a section's frames into frames.tar
 
 # ---------------------------------------------------------------------------
 # SECTIONS — comment out any line to disable that diagnostic
@@ -127,4 +128,5 @@ python3 "${SCRIPT_DIR}/BNS_all.py" "${ARGS[@]}"
 # ---------------------------------------------------------------------------
 echo ""
 echo "=== Making movies from ${FIGPATH} ==="
-bash "${SCRIPT_DIR}/make_movies.sh" "${MOVIE_FPS}" "${MOVIE_STRIDE}" "${FIGPATH}"
+PACK_FRAMES="${PACK_FRAMES}" \
+    bash "${SCRIPT_DIR}/make_movies.sh" "${MOVIE_FPS}" "${MOVIE_STRIDE}" "${FIGPATH}"
