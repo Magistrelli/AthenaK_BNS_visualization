@@ -71,7 +71,7 @@ if [[ ! -d "${FIGPATH}" ]]; then
     return 1 2>/dev/null || exit 1
 fi
 
-# Absolutize so the ffmpeg concat lists are unambiguous regardless of CWD.
+# Absolutize so the frame links given to ffmpeg are unambiguous regardless of CWD.
 FIGPATH="$(cd "${FIGPATH}" && pwd)"
 
 MOVIEDIR="${FIGPATH}/all_movies"

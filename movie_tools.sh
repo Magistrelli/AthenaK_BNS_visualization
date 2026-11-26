@@ -81,22 +81,29 @@ _movie_setup() {
 
 _encode_movie() {
     local outfile="$1"; shift
-    local listfile f status
-    listfile="$(mktemp "${TMPDIR:-/tmp}/mm_fflist.XXXXXX")"
-    for f in "$@"; do printf "file '%s'\n" "${f}" >> "${listfile}"; done
+    local tmpdir f i=0 status
+    # Feed the frames as a numbered image sequence of links: through the
+    # concat demuxer, still images get no valid timestamps and newer ffmpeg
+    # versions drop them ("invalid dropping").
+    tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/mm_frames.XXXXXX")"
+    for f in "$@"; do
+        [[ "${f}" == /* ]] || f="${PWD}/${f}"
+        ln -s "${f}" "${tmpdir}/$(printf '%06d' "${i}").png"
+        i=$(( i + 1 ))
+    done
     if [[ "${VCODEC}" == "gif" ]]; then
         # High-quality GIF via palette generation (single-pass filtergraph).
-        "${FFMPEG}" -y -r "${FPS}" -f concat -safe 0 -i "${listfile}" \
+        "${FFMPEG}" -y -framerate "${FPS}" -i "${tmpdir}/%06d.png" \
             -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse=dither=bayer" \
             -loop 0 "${outfile}" -loglevel warning -stats
     else
-        "${FFMPEG}" -y -r "${FPS}" -f concat -safe 0 -i "${listfile}" \
+        "${FFMPEG}" -y -framerate "${FPS}" -i "${tmpdir}/%06d.png" \
             -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" \
             -c:v "${VCODEC}" -pix_fmt yuv420p "${QUALITY_FLAGS[@]}" \
             -movflags +faststart -f mp4 "${outfile}" -loglevel warning -stats
     fi
     status=$?
-    rm -f "${listfile}"
+    rm -rf "${tmpdir}"
     return "${status}"
 }
 
