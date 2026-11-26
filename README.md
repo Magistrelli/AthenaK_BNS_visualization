@@ -18,7 +18,7 @@ vorticity, and the Q-criterion.
 
 | File | Purpose |
 |------|---------|
-| `run_all.sh` | Runs everything for all simulations in `config.ini`: `BNS_all.sh` and `run_analysis.sh` per simulation, then `BNS_compare.sh` and `run_comparison.sh` (see Usage). |
+| `run_all.sh` | Runs everything for all simulations in `config.ini`: `BNS_all.sh` and `run_analysis.sh` per simulation, then `run_comparison.sh` and `BNS_compare.sh` (see Usage). |
 | `BNS_all.py` | Main visualization driver. Fully configurable via command-line flags (`--help`). File names are keyed on `--jobname` (default `bns`), so the same driver serves BNS/BHNS/BBH runs; each frame series is written to its own `Figs/<name>_xy/` subfolder, and sections whose input files are absent are skipped. |
 | `BNS_all.sh` | Convenience wrapper: reads paths from `config.ini`, builds the argument list (incl. `JOBNAME`), runs `BNS_all.py`, then `make_movies.sh`. |
 | `BNS_3d.sh` | 3-D driver: renders `bns.prim3D` snapshots as PyVista isosurfaces + Matplotlib orthoslices, then makes movies. Uses `plot_3d_data/`. |
@@ -80,10 +80,10 @@ bash run_all.sh --skip bns_all
 
 Runs, in order: `BNS_all.sh` (history plots, frames, movies) and
 `sph_data_analysis/run_analysis.sh` (merger time, ejecta, neutrinos) for each
-simulation listed in `config.ini`, then `BNS_compare.sh` and
-`sph_data_analysis/run_comparison.sh` once for all of them (the comparisons need
-at least two simulations; `run_comparison.sh` only takes those with an analysis
-directory). A failing simulation does not stop the others; the run ends with a
+simulation listed in `config.ini`, then `sph_data_analysis/run_comparison.sh`
+and last `BNS_compare.sh` (history overlay, and for two simulations the slow
+2-D slice comparison) once for all of them (the comparisons need at least two
+simulations; `run_comparison.sh` only takes those with an analysis directory). A failing simulation does not stop the others; the run ends with a
 summary of what ran, was skipped or failed. Each script keeps its own settings
 (see its header and the sections below), and reruns only redo what changed.
 

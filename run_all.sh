@@ -10,9 +10,10 @@
 # Steps, in this order (each script keeps its own settings, see its header):
 #   bns_all         BNS_all.sh for each simulation: history plots, frames, movies
 #   analysis        sph_data_analysis/run_analysis.sh for each simulation
-#   bns_compare     BNS_compare.sh once for all simulations (needs only .hst files)
 #   run_comparison  sph_data_analysis/run_comparison.sh once for all simulations
 #                   with an analysis directory (written by the analysis step)
+#   bns_compare     BNS_compare.sh once for all simulations: history overlay,
+#                   and for two simulations the (slow) 2-D slice comparison
 # The simulations are the `simpath` lines of config.ini; the two comparisons
 # need at least two of them.  A failing simulation does not stop the others;
 # the summary at the end lists what ran, was skipped or failed.
@@ -21,7 +22,7 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ALL_STEPS=(bns_all analysis bns_compare run_comparison)
+ALL_STEPS=(bns_all analysis run_comparison bns_compare)
 
 usage() { echo "Usage: $0 [--only STEP,...] [--skip STEP,...]  (steps: ${ALL_STEPS[*]})"; exit 1; }
 
@@ -94,12 +95,6 @@ together() {   # STEP SCRIPT DIR LABEL [DIR LABEL ...]
 wanted bns_all  && per_sim bns_all  "${SCRIPT_DIR}/BNS_all.sh"
 wanted analysis && per_sim analysis "${SCRIPT_DIR}/sph_data_analysis/run_analysis.sh"
 
-if wanted bns_compare; then
-    runs=()
-    for sim in "${SIMS[@]}"; do runs+=("${sim%%|*}" "${sim#*|}"); done
-    together bns_compare "${SCRIPT_DIR}/BNS_compare.sh" "${runs[@]}"
-fi
-
 if wanted run_comparison; then
     models=()
     for sim in "${SIMS[@]}"; do
@@ -110,6 +105,13 @@ if wanted run_comparison; then
         fi
     done
     together run_comparison "${SCRIPT_DIR}/sph_data_analysis/run_comparison.sh" "${models[@]}"
+fi
+
+# Last, as its 2-D slice comparison (two simulations) can take long.
+if wanted bns_compare; then
+    runs=()
+    for sim in "${SIMS[@]}"; do runs+=("${sim%%|*}" "${sim#*|}"); done
+    together bns_compare "${SCRIPT_DIR}/BNS_compare.sh" "${runs[@]}"
 fi
 
 banner "summary"
